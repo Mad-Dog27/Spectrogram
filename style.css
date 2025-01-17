@@ -1,0 +1,36 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+#container {
+    position: absolute;
+    top: 20;
+    left: 20;
+    background: #f1eeee;
+    width: 100%;
+    height: 85%;
+
+}
+
+canvas {
+    position: relative;
+
+}
+
+#canvas,
+#canvas2 {
+    width: 600px;
+    height: 300px;
+    margin: 10px;
+    border: 1px solid black;
+    /* Optional: adds border to the canvas for visibility */
+}
+
+#canvasSpectrum {
+    margin: 10px;
+    border: 1px solid black;
+    width: 1200px;
+    height: 400px;
+}

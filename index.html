@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>document</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+</head>
+
+<body>
+    <h1>Load and Process a WAV File</h1>
+    <input type="file" id="audioFileInput" accept=".wav" />
+    <button id="processAgain">Process Again</button>
+    <button id="Mic">Toggle Microphone</button>
+    <br></br>
+
+    <div style="display: flex; align-items: center; gap: 20px;">
+        <div>
+            <label for="scaleSlider">Scale: </label>
+            <input type="range" id="scaleSlider" min="10" max="90" value="50" step="1">
+            <p>Scale: <span id="scaleSliderValue">3</span></p>
+        </div>
+
+        <div>
+            <label for="sensSlider">Sensitivity: </label>
+            <input type="range" id="sensSlider" min="1" max="10" value="1" step="0.25">
+            <p>Sensitivity: <span id="sensSliderValue">1</span></p>
+        </div>
+
+        <div>
+            <label for="contrastSlider">Contrast: </label>
+            <input type="range" id="contrastSlider" min="0" max="5" value="0" step="0.1">
+            <p>Contrast: <span id="contrastSliderValue">0</span></p>
+        </div>
+        <div>
+            <label for="windowSelect">Choose a window function:</label>
+            <select id="windowSelect">
+                <option value="rectangular">Rectangular</option>
+                <option value="hamming">Hamming</option>
+                <option value="blackman Harris">Blackman-Harris</option>
+            </select>
+        </div>
+        <div>
+            <label for="colourSelect">Choose a colour scheme:</label>
+            <select id="colourSelect">
+                <option value="greyScale">Grey Scale</option>
+                <option value="heatedMetal">Heated Metal</option>
+            </select>
+        </div>
+    </div>
+
+
+
+    <div id="container">
+
+
+
+        <br></br>
+        <p></p>
+        <canvas id="canvas"></canvas>
+        <canvas id="canvas2"></canvas>
+        <canvas id="canvasSpectrum"></canvas>
+
+
+        <audio id="audio"></audio>
+
+    </div>
+    <script src="index.js"></script>
+</body>
+
+</html>
