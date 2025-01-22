@@ -1,6 +1,8 @@
 const processAgainInput = document.getElementById('processAgain');
 const micButtonInput = document.getElementById('Mic');
 
+const melButtonInput = document.getElementById("melToggle")
+const isMel = document.getElementById('isMel')
 const audioFileInput = document.getElementById('audioFileInput');
 // Create an AudioContext
 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -10,24 +12,20 @@ const FRAMESIZE = 2048; //time domain amount of samples taken
 const nFFT = 2048; //frequency domain amount zeroes and values aquired through fft
 const overlap = 1024;
 */
-const FRAMESIZE = 2048; //time domain amount of samples taken
-const nFFT = 4096; //frequency domain amount zeroes and values aquired through fft
-const overlap = 1024;
+const FRAMESIZE = 2048 / 1; //time domain amount of samples taken
+const nFFT = 4096 / 1; //frequency domain amount zeroes and values aquired through fft
+const overlap = FRAMESIZE / 2;
 const SPEED = 1;
 let SCALE = 3;
 let SENS = 1;
 let CONTRAST = 0;
 
-
 const container = document.getElementById("container");
 const canvas = document.getElementById("canvas");
 const canvas2 = document.getElementById("canvas2");
+
 const canvasSpectrum = document.getElementById("canvasSpectrum");
 const ctxSpectrum = canvasSpectrum.getContext("2d");
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
-canvas2.width = window.innerWidth;
-canvas2.height = window.innerHeight;
 
 
 const scaleSlider = document.getElementById('scaleSlider');
@@ -44,9 +42,11 @@ const windowSelect = document.getElementById('windowSelect');
 
 const colourSchemeSelect = document.getElementById('colourSelect');
 
+console.log(`Canvas dimensions: ${canvas.width}x${canvas.height}`);
 
-canvasSpectrum.width = window.innerWidth;
-canvasSpectrum.height = window.innerHeight;
+console.log(`Canvas dimensions: ${canvasSpectrum.width}x${canvasSpectrum.height}`);
+
+
 
 
 const ctx = canvas.getContext("2d");
@@ -63,6 +63,9 @@ let filePlaying = null;
 let finshedRT = null;
 let micOn = null;
 
+let mel = null;
+let melOn = false;
+
 //Adds an event listnener for the audioFileInput button, when the input file is changed the function will run after the file is changed.
 audioFileInput.addEventListener('change', async (event) => {
     const file = event.target.files[0]; // file list of all the inputed files, [0] means only one file will be used
@@ -72,6 +75,7 @@ audioFileInput.addEventListener('change', async (event) => {
     const arrayBuffer = await file.arrayBuffer(); //Read the file as an ArrayBuffer which is a binary representation of the audio file to use in the next line
     audioBuffer = await audioContext.decodeAudioData(arrayBuffer);//Uses the binary version to create an audio buffer
 
+    melScale()
     // Process the audio buffer (e.g., generate a spectrogram)
     filePlaying = true;
     processAudioBuffer(audioBuffer);
@@ -87,6 +91,19 @@ processAgainInput.addEventListener('click', () => {
 
     console.log("proccessing again")
     processAudioBuffer(audioBuffer);
+
+})
+melButtonInput.addEventListener('click', () => {
+    //Event listener to process the audio file again, will happen on click
+
+    if (melOn) {
+        melOn = null;
+        isMel.textContent = "off";
+    } else {
+        melOn = true;
+        isMel.textContent = "on";
+    }
+    console.log("Mel toggled")
 
 })
 
@@ -108,7 +125,7 @@ contrastSlider.addEventListener('input', () => {
     //Contrast slider display and use, on new input
     CONTRAST = contrastSlider.value; //Storing each new value in CONTRAST
     contrastSliderValue.textContent = CONTRAST; //Updating display
-    console.log(`Senitivity: ${CONTRAST}`);
+    console.log(`Contrast: ${CONTRAST}`);
 })
 
 micButtonInput.addEventListener('click', () => {
@@ -138,6 +155,7 @@ colourSchemeSelect.addEventListener('change', (event) => {
 
 async function getMicData() {
     try {
+        if (mel == null) { mel = melScale(); }
         // Requesting microphone acces and waiting, then creating a mediastream from it
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         const mediaStreamSource = audioContext.createMediaStreamSource(stream);
@@ -163,16 +181,14 @@ async function getMicData() {
 
             const chunk = addZeroes(applyWindow(timeDomainBuffer));//Applying a window AND zero padding, the function above defaults to rectangular window
             const result = fft(chunk); //FAST FOURIER TRANSFORM
-            const newResult = result.slice(0, analyser.fftSize / 2); // Cutting in half due to aliasing
 
-            const magnitudes = newResult.map(
-                //FFT function outputs real and imaginary output, this converts it into a magnitude
-                ({ real, imag }) => Math.sqrt(real ** 2 + imag ** 2)
-            );
+            const dataMagnitude = result.map(bin => bin.magnitude);
+            const slicedMagnitude = dataMagnitude.slice(0, nFFT / 2)
+
 
             drawVisual(analyser); //Create first audio signal graph (NOT MY CODE)
-            createSpectrum(magnitudes) //Create somewhat real-time spectrum (MY CODE)
-            createMovingSpectrogram(magnitudes); //Create real-time spectrograph (MY CODE)
+            createSpectrum(dataMagnitude) //Create somewhat real-time spectrum (MY CODE)
+            createMovingSpectrogram(slicedMagnitude); //Create real-time spectrograph (MY CODE)
 
             if (micOn) {
                 requestAnimationFrame(processMicInput); //Keep calling proccessMicINput
@@ -229,6 +245,7 @@ function executeFFTWithSync() {
     let magnitudes = [];
     let result = [];
     let currentChunkIndex = 0;
+    mel = melScale();
 
     // Start audio playback
     source.start(0);
@@ -246,15 +263,18 @@ function executeFFTWithSync() {
 
             // Fast Fourier transform of current chunk, cutting results in half then converting to magnitude
             result[currentChunkIndex] = fft(chunk);
-            result[currentChunkIndex] = result[currentChunkIndex].slice(0, FRAMESIZE / 2);
-            magnitudes[currentChunkIndex] = result[currentChunkIndex].map(
-                ({ real, imag }) => Math.sqrt(real ** 2 + imag ** 2)
-            );
+            //result[currentChunkIndex] = result[currentChunkIndex].slice(0, FRAMESIZE / 2);
 
             //Updating all Graphs 
+            const dataMagnitude = result[currentChunkIndex].map(bin => bin.magnitude);
+            const slicedMagnitude = dataMagnitude.slice(0, nFFT / 2)
+
+            const datadB = result[currentChunkIndex].map(bin => bin.dB);
+            const slicedDb = datadB.slice(0, nFFT / 2)
+
             drawVisual(analyser)
-            createSpectrum(magnitudes[currentChunkIndex]);
-            createMovingSpectrogram(magnitudes[currentChunkIndex]);
+            createSpectrum(result[currentChunkIndex]);
+            createMovingSpectrogram(slicedMagnitude);
 
             currentChunkIndex++; //incrementing chunk index
         }
@@ -268,41 +288,7 @@ function executeFFTWithSync() {
     // Start updating the spectrogram
     requestAnimationFrame(updateSpectrogram);
 }
-function drawVisual(analyser) {
-    const bufferLength = analyser.frequencyBinCount;//frequency bin count is a node property, bufferlength is the total num of frequency bins
-    const dataArray = new Uint8Array(bufferLength);
-    const barWidth = canvas.width / bufferLength; //divide the canvas width by freq bin amount to find the width of freq bin
-    analyser.getByteFrequencyData(dataArray); //fills data array with freqeuncy data from audio signal, values represent loudness of each freq bin
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx2.clearRect(0, 0, canvas.width, canvas.height);
-
-
-    let x = 0;
-    let x1 = canvas2.width / 2;
-    let x2 = canvas2.width / 2;
-    for (let i = 0; i < bufferLength; i++) {
-        barHeight = dataArray[i]; //each frequency bin size
-
-        const red = Math.min(255, barHeight * 10);
-        const green = Math.min(255, 255 - barHeight);
-        const blue = Math.min(255, barHeight * 2);
-        ctx.fillStyle = `rgb(${red}, ${green}, ${blue})`;
-        ctx.fillRect(x, (canvas.height - 2 * barHeight), 3 * barWidth, 2 * barHeight);//displaying freq bin size as a bar 
-        /*
-        ctx2.fillStyle = `rgb(${red}, ${green}, ${blue})`;
-        ctx2.fillRect(x1, canvas.height - 5 * barHeight, barWidth, 5 * barHeight);//displaying freq bin size as a bar 
-        ctx2.fillRect(x2, canvas.height - 5 * barHeight, barWidth, 5 * barHeight); // this will continue moving from left to right
-        */
-        x += barWidth * 3;
-        x1 -= barWidth; //moving x position to the right by bar width
-        x2 += barWidth; //moving x position to the right by bar width
-
-    }
-
-
-
-}
 function sliceIntoChunks(audioBuffer) {
 
     const monoChannel = audioBuffer.getChannelData(0);
@@ -367,7 +353,7 @@ function addZeroes(frame) {
 
 function fft(input) {
     const N = input.length; //Assume N is of size of power 2, ie (2^n = N)
-    if (N <= 1) return [{ real: input[0], imag: 0 }];
+    if (N <= 1) return [{ real: input[0], imag: 0, magnitude: 0, dB: -Infinity }];
 
     if ((N & (N - 1)) !== 0) {
         console.log("Input array length must be a power of 2.");
@@ -379,7 +365,7 @@ function fft(input) {
 
 
     const magnitude = Array(N)
-    const combined = Array(N).fill(0).map(() => ({ real: 0, imag: 0 }));
+    const combined = Array(N).fill(0).map(() => ({ real: 0, imag: 0, magnitude: 0, dB: -Infinity }));
 
     for (let k = 0; k < N / 2; k++) {
         const angle = (-2 * Math.PI * k) / N;
@@ -401,6 +387,14 @@ function fft(input) {
             real: even[k].real - t.real,
             imag: even[k].imag - t.imag
         }
+
+        combined[k].magnitude = Math.sqrt(combined[k].real ** 2 + combined[k].imag ** 2);
+        combined[k].dB = 20 * Math.log10(combined[k].magnitude);
+
+        combined[k + N / 2].magnitude = Math.sqrt(
+            combined[k + N / 2].real ** 2 + combined[k + N / 2].imag ** 2
+        );
+        combined[k + N / 2].dB = 20 * Math.log10(combined[k + N / 2].magnitude);
         //magnitude[k] = Math.sqrt(combined[k].real ** 2 + combined[k].imag ** 2);
     }
 
@@ -412,20 +406,59 @@ function complexExp(angle) {
         imag: Math.sin(angle)
     };
 }
+
+function drawVisual(analyser) {
+    const bufferLength = analyser.frequencyBinCount;//frequency bin count is a node property, bufferlength is the total num of frequency bins
+    const dataArray = new Uint8Array(bufferLength);
+    const barWidth = canvas.width / bufferLength; //divide the canvas width by freq bin amount to find the width of freq bin
+    analyser.getByteFrequencyData(dataArray); //fills data array with freqeuncy data from audio signal, values represent loudness of each freq bin
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx2.clearRect(0, 0, canvas.width, canvas.height);
+
+
+    let x = 0;
+    let x1 = canvas2.width / 2;
+    let x2 = canvas2.width / 2;
+    for (let i = 0; i < bufferLength; i++) {
+        barHeight = dataArray[i]; //each frequency bin size
+
+        const red = Math.min(255, barHeight * 10);
+        const green = Math.min(255, 255 - barHeight);
+        const blue = Math.min(255, barHeight * 2);
+        ctx.fillStyle = `rgb(${red}, ${green}, ${blue})`;
+        ctx.fillRect(x, (canvas.height - barHeight), barWidth, barHeight);//displaying freq bin size as a bar 
+        /*
+        ctx2.fillStyle = `rgb(${red}, ${green}, ${blue})`;
+        ctx2.fillRect(x1, canvas.height - 5 * barHeight, barWidth, 5 * barHeight);//displaying freq bin size as a bar 
+        ctx2.fillRect(x2, canvas.height - 5 * barHeight, barWidth, 5 * barHeight); // this will continue moving from left to right
+        */
+        x += barWidth;
+        x1 -= barWidth; //moving x position to the right by bar width
+        x2 += barWidth; //moving x position to the right by bar width
+
+    }
+
+
+
+}
+
+
 function createSpectrum(X) {
+
     ctx2.clearRect(0, 0, canvas2.width, canvas2.height);
     //const windowRatio = nFFT / FRAMESIZE
 
-    const K = X.length / 2; // Number of frequency bins
+    const K = X.length; // Number of frequency bins
     const barWidth = canvas2.width / K; // Width of each bar in the spectrum
     let freq = 0;
     // Normalize the magnitude values to fit the canvas height
     const maxMagnitude = Math.max(...X);
     const normalizedValues = X.map(value => (value / maxMagnitude) * canvas2.height);
-    for (let i = 0; i < K; i++) {
+    for (let i = 0; i < K / 2; i++) {
         //const freq = samplingFreq * (1 / K) * i; // Frequency (scaled for display purposes)
 
-        const value = normalizedValues[i]; // Normalized magnitude
+        const value = 100 * X[i].magnitude; // Normalized magnitude
 
 
         // Use some color mapping for visualization
@@ -435,10 +468,7 @@ function createSpectrum(X) {
         ctx2.fillStyle = `rgb(${red}, ${green}, ${blue})`;
 
         // Draw the bar
-        ctx2.fillRect(freq, // X-position
-            canvas2.height - value, // Y-position (inverted for canvas coordinate system)
-            barWidth, // Width of the bar
-            value // Height of the bar
+        ctx2.fillRect(freq, canvas2.height - value, barWidth, value // Height of the bar
         );
         freq += barWidth;
     }
@@ -446,48 +476,104 @@ function createSpectrum(X) {
 }
 
 function createMovingSpectrogram(X) {
-    const K = nFFT / 2; // Number of frequency bins
-    const barWidth = SPEED * SCALE;
-    const binHeight = SCALE * canvasSpectrum.height / K;
-
+    const barWidth = 2;
+    const binHeight = canvasSpectrum.height / (nFFT / 2);
     ctxSpectrum.drawImage(canvasSpectrum, -barWidth, 0)
     ctxSpectrum.clearRect(canvasSpectrum.width - barWidth, 0, barWidth, canvasSpectrum.height);
     //const windowRatio = nFFT / FRAMESIZE
 
 
     // Normalize the magnitude values to fit the canvas height
-    //const maxMagnitude = Math.max(...X);
+    const maxValue = Math.max(...X);
+    const minValue = Math.min(...X);
     //const normalizedValues = X / maxMagnitude;
     //const normalizedValues = X.map(value => (value / maxMagnitude));
     //const maxNewMagnitude = Math.min(...normalizedValues);
-    //console.log(maxNewMagnitude)
 
-    X.forEach((intensity, index) => {
+    if (!melOn) {
 
-        const newIntensity = (intensity / SENS) - (CONTRAST)
+        X.forEach((intensity, index) => {
 
-        //const freqAxis = (index / K) * samplingFreq;
-        //intensity = (intensity - 0.1) * 10
-        ctxSpectrum.fillStyle = intensityToColor(newIntensity);
-        ctxSpectrum.fillRect(
-            canvasSpectrum.width - barWidth,           // x-coordinate
-            canvasSpectrum.height - (index * binHeight),               // y-coordinate
-            barWidth,                        // width
-            binHeight                        // height
-        );
-    });
+            const newIntensity = (intensity / SENS) - (CONTRAST)
 
+            //const freqAxis = (index / K) * samplingFreq;
+            //intensity = (intensity - 0.1) * 10
+            ctxSpectrum.fillStyle = intensityToColor(newIntensity, maxValue, minValue);
+            ctxSpectrum.fillRect(
+                canvasSpectrum.width - barWidth,           // x-coordinate
+                canvasSpectrum.height - (index * binHeight * 2),               // y-coordinate
+                barWidth,                        // width
+                binHeight                    // height
+            );
+
+        });
+    } else {
+        mel.forEach((intensity, index) => {
+            let melHeight = binHeight;
+            if (index < nFFT - 1) {
+                melHeight = mel[index + 1] - intensity
+            }
+            melHeight = melHeight / 1
+            ctxSpectrum.fillStyle = intensityToColor(X[index], maxValue, minValue);
+            ctxSpectrum.fillRect(
+                canvasSpectrum.width - barWidth,           // x-coordinate
+                canvasSpectrum.height - (2 * intensity),               // y-coordinate
+                barWidth,                        // width
+                melHeight                        // height
+            );
+        })
+
+
+    }
 }
 
+function melScale() {
+    const numBins = nFFT;
+    let maxFreq = 8000;
+    if (audioBuffer != null) {
+        maxFreq = audioBuffer.sampleRate / 2;
+    }
+    const maxMel = 2595 * Math.log10(1 + maxFreq / 700);
+    let melBins = new Array(numBins);
 
-function intensityToColor(intensity) {
+    for (let i = 0; i < numBins; i++) {
+        const freq = (i / numBins) * maxFreq;
+
+        const currentMel = 2595 * Math.log10(1 + freq / 700);
+
+        melBins[i] = (currentMel / maxMel) * canvasSpectrum.height;
+    }
+    return melBins;
+}
+
+function intensityToColor(intensity, maxValue, minValue) {
+    const normValue = (intensity - minValue) / (maxValue - minValue)
+    const scaledValue = Math.floor((1 - normValue) * 255)
+
     const value = Math.floor((1 - intensity) * 255); // Map 0-1 to 0-255
     let r, g, b;
 
+    /*if (chosenColourScheme == "greyScale") {
+        if (maxValue > 0.1) {
+            r = scaledValue;
+            g = scaledValue;
+            b = scaledValue;
+        } else {
+            r = 255;
+            g = 255;
+            b = 255;
+        }
+    }*/
     if (chosenColourScheme == "greyScale") {
-        r = value;
-        g = value;
-        b = value;
+        if (maxValue > 0) {
+            r = value;
+            g = value;
+            b = value;
+        } else {
+            r = value;
+            g = value;
+            b = value;
+        }
     }
     if (chosenColourScheme == "heatedMetal") {
         if (intensity <= 0.33) {

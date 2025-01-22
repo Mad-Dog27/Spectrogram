@@ -38,9 +38,9 @@
         <div>
             <label for="windowSelect">Choose a window function:</label>
             <select id="windowSelect">
+                <option value="blackman Harris">Blackman-Harris</option>
                 <option value="rectangular">Rectangular</option>
                 <option value="hamming">Hamming</option>
-                <option value="blackman Harris">Blackman-Harris</option>
             </select>
         </div>
         <div>
@@ -49,6 +49,11 @@
                 <option value="greyScale">Grey Scale</option>
                 <option value="heatedMetal">Heated Metal</option>
             </select>
+        </div>
+        <div>
+            <button id="melToggle">Toggle Mel</button>
+            <p>Mel: <span id="isMel">off</span></p>
+
         </div>
     </div>
 
@@ -60,9 +65,10 @@
 
         <br></br>
         <p></p>
-        <canvas id="canvas"></canvas>
-        <canvas id="canvas2"></canvas>
-        <canvas id="canvasSpectrum"></canvas>
+        <canvas id="canvas" width="600" height="300"></canvas>
+        <canvas id="canvas2" width="600" height="300"></canvas>
+        <canvas id="canvasSpectrum" width="1200" height="400"></canvas>
+
 
 
         <audio id="audio"></audio>
