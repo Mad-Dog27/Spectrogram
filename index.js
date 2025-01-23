@@ -3,6 +3,12 @@ const micButtonInput = document.getElementById('Mic');
 
 const melButtonInput = document.getElementById("melToggle")
 const isMel = document.getElementById('isMel')
+
+const recordButtonInput = document.getElementById('recordToggle')
+const recordValue = document.getElementById('recordValue')
+
+const playRecordButton = document.getElementById('playRecord')
+
 const audioFileInput = document.getElementById('audioFileInput');
 // Create an AudioContext
 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -19,7 +25,8 @@ const SPEED = 1;
 let SCALE = 3;
 let SENS = 1;
 let CONTRAST = 0;
-
+let recordOn = false;
+let storedBuffer = [];
 const container = document.getElementById("container");
 const canvas = document.getElementById("canvas");
 const canvas2 = document.getElementById("canvas2");
@@ -42,7 +49,7 @@ const windowSelect = document.getElementById('windowSelect');
 
 const colourSchemeSelect = document.getElementById('colourSelect');
 
-console.log(`Canvas dimensions: ${canvas.width}x${canvas.height}`);
+console.log(`Canvas dimensions: ${canvas2.width}x${canvas2.height}`);
 
 console.log(`Canvas dimensions: ${canvasSpectrum.width}x${canvasSpectrum.height}`);
 
@@ -107,6 +114,26 @@ melButtonInput.addEventListener('click', () => {
 
 })
 
+recordButtonInput.addEventListener('click', () => {
+    //Event listener to process the audio file again, will happen on click
+
+    if (recordOn) {
+        recordOn = false;
+        recordValue.textContent = "no"
+        //processRecording()
+
+    } else {
+        recordOn = true;
+        recordValue.textContent = "yes"
+    }
+
+})
+playRecordButton.addEventListener('click', () => {
+    //Event listener to process the audio file again, will happen on click
+    processRecording();
+
+})
+
 scaleSlider.addEventListener('input', () => {
     //Scale slider display and use, storign value in SCALE
     SCALE = 3 * scaleSlider.value / 50; //Converting to a smaller number for later maths
@@ -153,6 +180,46 @@ colourSchemeSelect.addEventListener('change', (event) => {
     console.log(`Colour Scheme Selected: ${chosenColourScheme}`);
 });
 
+function processRecording() {
+
+    const totalLength = storedBuffer.reduce((sum, storedBuffer) => sum + storedBuffer.length, 0);
+    const combinedBuffer = new Float32Array(totalLength);
+
+    let offset = 0;
+    storedBuffer.forEach(chunk => {
+        combinedBuffer.set(chunk, offset);
+        offset += chunk.length;
+    });
+    console.log(combinedBuffer)
+
+    audioBuffer = audioContext.createBuffer(
+        1, // Number of channels
+        combinedBuffer.length, // Length of the buffer
+        16000 // Sample rate
+    );
+
+    // Copy the combined buffer into the AudioBuffer
+    audioBuffer.getChannelData(0).set(combinedBuffer);
+
+    // Create a source and play the buffer
+    const source = audioContext.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(audioContext.destination);
+    source.start(0);
+
+    const numChunk = storedBuffer.length;
+
+    for (let currentChunk = 0; currentChunk < numChunk; currentChunk++) {
+        const chunk = addZeroes(applyWindow(storedBuffer[currentChunk]))
+        const result = fft(chunk);
+
+        const dataMagnitude = result.map(bin => bin.magnitude);
+        const slicedMagnitude = dataMagnitude.slice(0, nFFT / 2);
+        createMovingSpectrogram(slicedMagnitude); //Create real-time spectrograph (MY CODE)
+
+    }
+
+}
 async function getMicData() {
     try {
         if (mel == null) { mel = melScale(); }
@@ -167,7 +234,7 @@ async function getMicData() {
 
         // Array to store time-domain or frequency-domain data
         const dataArray = new Float32Array(analyser.frequencyBinCount);
-
+        let chunkIndex = 0;
         // Function to process and visualize the microphone input 
         function processMicInput() {
             //New array/Buffer to store the audio samples
@@ -190,8 +257,17 @@ async function getMicData() {
             createSpectrum(dataMagnitude) //Create somewhat real-time spectrum (MY CODE)
             createMovingSpectrogram(slicedMagnitude); //Create real-time spectrograph (MY CODE)
 
+            if (recordOn) {
+                storedBuffer[chunkIndex] = timeDomainBuffer;
+                chunkIndex++;
+            }
             if (micOn) {
                 requestAnimationFrame(processMicInput); //Keep calling proccessMicINput
+            } else {
+                mediaStreamSource.disconnect();
+                analyser.disconnect();
+                stream.getTracks().forEach(track => track.stop()); // Stops the media stream tracks
+                console.log('Stream processing stopped.');
             }
 
         }
@@ -212,18 +288,6 @@ function processAudioBuffer(audioBuffer) {
     console.log('Duration (s):', audioBuffer.duration);
     console.log(audioBuffer.length);
     //Exectuting the FFT for file input
-    executeFFTWithSync();
-}
-
-
-function executeFFTWithSync() {
-    /* This fucntion deals with handling the processing, mathmatical operations and display of the audioBuffer,
-    
-    NOTE: Origninally it was only meant to deal with the FFT Maths but due to the nature of audio process, 
-    much more needed to be added. In the future I would like to clean this function up 16/01/2025
-    */
-    //Dealing with the new AudioContext and audioBuffer and connecting the source to it
-    const audioContext = new AudioContext();
     const source = audioContext.createBufferSource();
     source.buffer = audioBuffer;
     source.connect(audioContext.destination);
@@ -231,6 +295,20 @@ function executeFFTWithSync() {
     const analyser = audioContext.createAnalyser(); // Analyser node creation, helps extract information like frequencies or amplitudes
     source.connect(analyser); // Connect the audio source to the analyser
     analyser.connect(audioContext.destination); // Connects the analyser to the speakers
+    executeFFTWithSync(audioBuffer, source, analyser);
+}
+
+
+function executeFFTWithSync(audioBuffer, source, analyser) {
+    /* This fucntion deals with handling the processing, mathmatical operations and display of the audioBuffer,
+    
+    NOTE: Origninally it was only meant to deal with the FFT Maths but due to the nature of audio process, 
+    much more needed to be added. In the future I would like to clean this function up 16/01/2025
+    */
+    //Dealing with the new AudioContext and audioBuffer and connecting the source to it
+
+    //const audioContext = new AudioContext();
+
 
     /*For the next step, the audioBuffer needs to be cut into respective chunks for audioProccessing, 
     first the chunk characteristics need to be determined*/
@@ -246,7 +324,7 @@ function executeFFTWithSync() {
     let result = [];
     let currentChunkIndex = 0;
     mel = melScale();
-
+    audioContext.resume()
     // Start audio playback
     source.start(0);
     const startTime = audioContext.currentTime;
@@ -256,7 +334,6 @@ function executeFFTWithSync() {
         // Calculate the expected chunk index based on current playback time
         const elapsedTime = audioContext.currentTime - startTime;
         const expectedChunkIndex = Math.floor(elapsedTime / chunkDuration);
-
         // Process and render all chunks up to the expected index
         while (currentChunkIndex <= expectedChunkIndex && currentChunkIndex < numChunks) { //If chunk processing is slower then expected and chunk index has not exceded total number of chunks
             const chunk = addZeroes(chunks[currentChunkIndex]); //Zero Padding
@@ -273,7 +350,7 @@ function executeFFTWithSync() {
             const slicedDb = datadB.slice(0, nFFT / 2)
 
             drawVisual(analyser)
-            createSpectrum(result[currentChunkIndex]);
+            createSpectrum(slicedMagnitude);
             createMovingSpectrogram(slicedMagnitude);
 
             currentChunkIndex++; //incrementing chunk index
@@ -282,7 +359,9 @@ function executeFFTWithSync() {
         // Continue updating the spectrogram if there are more chunks to process
         if (currentChunkIndex < numChunks) {
             requestAnimationFrame(updateSpectrogram);
-        } else { filePlaying = null; }
+        } else {
+            console.log("iedneifni"); filePlaying = null;
+        }
     }
 
     // Start updating the spectrogram
@@ -458,7 +537,7 @@ function createSpectrum(X) {
     for (let i = 0; i < K / 2; i++) {
         //const freq = samplingFreq * (1 / K) * i; // Frequency (scaled for display purposes)
 
-        const value = 100 * X[i].magnitude; // Normalized magnitude
+        const value = 8 * X[i] // Normalized magnitude
 
 
         // Use some color mapping for visualization
@@ -530,7 +609,7 @@ function createMovingSpectrogram(X) {
 function melScale() {
     const numBins = nFFT;
     let maxFreq = 8000;
-    if (audioBuffer != null) {
+    if (audioBuffer) {
         maxFreq = audioBuffer.sampleRate / 2;
     }
     const maxMel = 2595 * Math.log10(1 + maxFreq / 700);
