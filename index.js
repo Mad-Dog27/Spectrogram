@@ -181,21 +181,18 @@ colourSchemeSelect.addEventListener('change', (event) => {
 });
 
 function processRecording() {
+    audioBuffer = null;
 
-    const totalLength = storedBuffer.reduce((sum, storedBuffer) => sum + storedBuffer.length, 0);
-    const combinedBuffer = new Float32Array(totalLength);
 
-    let offset = 0;
-    storedBuffer.forEach(chunk => {
-        combinedBuffer.set(chunk, offset);
-        offset += chunk.length;
-    });
+    let combinedBuffer = (combineBuffers(storedBuffer))
+
+
     console.log(combinedBuffer)
 
     audioBuffer = audioContext.createBuffer(
         1, // Number of channels
         combinedBuffer.length, // Length of the buffer
-        16000 // Sample rate
+        audioContext.sampleRate // Sample rate
     );
 
     // Copy the combined buffer into the AudioBuffer
@@ -207,8 +204,7 @@ function processRecording() {
     source.connect(audioContext.destination);
     source.start(0);
 
-    const numChunk = storedBuffer.length;
-
+    processAudioBuffer(audioBuffer);    /*
     for (let currentChunk = 0; currentChunk < numChunk; currentChunk++) {
         const chunk = addZeroes(applyWindow(storedBuffer[currentChunk]))
         const result = fft(chunk);
@@ -217,9 +213,26 @@ function processRecording() {
         const slicedMagnitude = dataMagnitude.slice(0, nFFT / 2);
         createMovingSpectrogram(slicedMagnitude); //Create real-time spectrograph (MY CODE)
 
-    }
+    }*/
 
 }
+function combineBuffers(buffers) {
+    const totalLength = buffers.reduce((sum, buf) => sum + buf.length - overlap, 0) + overlap;
+    const combinedBuffer = new Float32Array(totalLength);
+
+    let offset = 0;
+    buffers.forEach((buffer, index) => {
+        for (let i = 0; i < buffer.length; i++) {
+            combinedBuffer[offset + i] += buffer[i];
+        }
+        offset += buffer.length - overlap;
+    });
+
+    return combinedBuffer;
+}
+
+
+
 async function getMicData() {
     try {
         if (mel == null) { mel = melScale(); }
@@ -259,6 +272,7 @@ async function getMicData() {
 
             if (recordOn) {
                 storedBuffer[chunkIndex] = timeDomainBuffer;
+                //storedBuffer[chunkIndex] = normalizeChunk(timeDomainBuffer, 0.9);
                 chunkIndex++;
             }
             if (micOn) {
