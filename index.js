@@ -18,15 +18,16 @@ const FRAMESIZE = 2048; //time domain amount of samples taken
 const nFFT = 2048; //frequency domain amount zeroes and values aquired through fft
 const overlap = 1024;
 */
-const FRAMESIZE = 2048 / 1; //time domain amount of samples taken
-const nFFT = 4096 / 1; //frequency domain amount zeroes and values aquired through fft
-const overlap = FRAMESIZE / 2;
+const FRAMESIZE = 2048 / 2; //time domain amount of samples taken
+const nFFT = 4096 / 2; //frequency domain amount zeroes and values aquired through fft
+const overlap = 512;
 const SPEED = 1;
 let SCALE = 3;
 let SENS = 1;
 let CONTRAST = 0;
 let recordOn = false;
 let storedBuffer = [];
+let count = 0;
 const container = document.getElementById("container");
 const canvas = document.getElementById("canvas");
 const canvas2 = document.getElementById("canvas2");
@@ -56,7 +57,6 @@ console.log(`Canvas dimensions: ${canvasSpectrum.width}x${canvasSpectrum.height}
 
 
 
-const ctx = canvas.getContext("2d");
 const ctx2 = canvas2.getContext("2d");
 
 // rectangular, hamming, blackman Harris
@@ -134,26 +134,7 @@ playRecordButton.addEventListener('click', () => {
 
 })
 
-scaleSlider.addEventListener('input', () => {
-    //Scale slider display and use, storign value in SCALE
-    SCALE = 3 * scaleSlider.value / 50; //Converting to a smaller number for later maths
-    scaleSliderValue.textContent = SCALE; // Update the display
-    console.log(`Scale: ${SCALE}`);
-});
 
-sensSlider.addEventListener('input', () => {
-    //Sensitivity slider display and use, on new input
-    SENS = sensSlider.value; //Storing new value in SENS
-    sensSliderValue.textContent = SENS; // Update the display
-    console.log(`Senitivity: ${SENS}`);
-});
-
-contrastSlider.addEventListener('input', () => {
-    //Contrast slider display and use, on new input
-    CONTRAST = contrastSlider.value; //Storing each new value in CONTRAST
-    contrastSliderValue.textContent = CONTRAST; //Updating display
-    console.log(`Contrast: ${CONTRAST}`);
-})
 
 micButtonInput.addEventListener('click', () => {
     //Event listener for Microphone input button, occurs on click, button acts as a toggle 
@@ -183,16 +164,16 @@ colourSchemeSelect.addEventListener('change', (event) => {
 function processRecording() {
     audioBuffer = null;
 
-
-    let combinedBuffer = (combineBuffers(storedBuffer))
+    console.log(storedBuffer)
+    let combinedBuffer = combineBuffers(storedBuffer);
 
 
     console.log(combinedBuffer)
-
+    console.log(count)
     audioBuffer = audioContext.createBuffer(
         1, // Number of channels
         combinedBuffer.length, // Length of the buffer
-        audioContext.sampleRate // Sample rate
+        48000 // Sample rate
     );
 
     // Copy the combined buffer into the AudioBuffer
@@ -217,19 +198,23 @@ function processRecording() {
 
 }
 function combineBuffers(buffers) {
-    const totalLength = buffers.reduce((sum, buf) => sum + buf.length - overlap, 0) + overlap;
+    // Calculate total length, subtracting overlap for transitions
+    const totalLength = buffers.reduce((sum, buf) => sum + buf.length, 0) - overlap * (buffers.length - 1);
     const combinedBuffer = new Float32Array(totalLength);
 
-    let offset = 0;
+    let offset = 0; // Starting position in the combinedBuffer
     buffers.forEach((buffer, index) => {
         for (let i = 0; i < buffer.length; i++) {
+            // Add the sample to the combinedBuffer, taking overlap into account
             combinedBuffer[offset + i] += buffer[i];
         }
+        // Move the offset forward, accounting for overlap
         offset += buffer.length - overlap;
     });
 
     return combinedBuffer;
 }
+
 
 
 
@@ -261,17 +246,22 @@ async function getMicData() {
 
             const chunk = addZeroes(applyWindow(timeDomainBuffer));//Applying a window AND zero padding, the function above defaults to rectangular window
             const result = fft(chunk); //FAST FOURIER TRANSFORM
-
             const dataMagnitude = result.map(bin => bin.magnitude);
             const slicedMagnitude = dataMagnitude.slice(0, nFFT / 2)
 
 
-            drawVisual(analyser); //Create first audio signal graph (NOT MY CODE)
-            createSpectrum(dataMagnitude) //Create somewhat real-time spectrum (MY CODE)
+            //drawVisual(analyser); //Create first audio signal graph (NOT MY CODE)
+            createSpectrum(slicedMagnitude) //Create somewhat real-time spectrum (MY CODE)
             createMovingSpectrogram(slicedMagnitude); //Create real-time spectrograph (MY CODE)
 
             if (recordOn) {
-                storedBuffer[chunkIndex] = timeDomainBuffer;
+                if (!storedBuffer[chunkIndex]) {
+                    storedBuffer[chunkIndex] = timeDomainBuffer;
+                    count = count + timeDomainBuffer.length
+                } else {
+                    console.warn("Chunk index already filled, potential overwrite detected.");
+                }
+                //storedBuffer[chunkIndex] = timeDomainBuffer;
                 //storedBuffer[chunkIndex] = normalizeChunk(timeDomainBuffer, 0.9);
                 chunkIndex++;
             }
@@ -363,7 +353,7 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
             const datadB = result[currentChunkIndex].map(bin => bin.dB);
             const slicedDb = datadB.slice(0, nFFT / 2)
 
-            drawVisual(analyser)
+            //drawVisual(analyser)
             createSpectrum(slicedMagnitude);
             createMovingSpectrogram(slicedMagnitude);
 
@@ -541,17 +531,17 @@ function createSpectrum(X) {
 
     ctx2.clearRect(0, 0, canvas2.width, canvas2.height);
     //const windowRatio = nFFT / FRAMESIZE
-
-    const K = X.length; // Number of frequency bins
+    const K = X.length / 2; // Number of frequency bins
     const barWidth = canvas2.width / K; // Width of each bar in the spectrum
     let freq = 0;
     // Normalize the magnitude values to fit the canvas height
     const maxMagnitude = Math.max(...X);
+
     const normalizedValues = X.map(value => (value / maxMagnitude) * canvas2.height);
     for (let i = 0; i < K / 2; i++) {
         //const freq = samplingFreq * (1 / K) * i; // Frequency (scaled for display purposes)
 
-        const value = 8 * X[i] // Normalized magnitude
+        const value = 9 * X[i] // Normalized magnitude
 
 
         // Use some color mapping for visualization
@@ -561,18 +551,18 @@ function createSpectrum(X) {
         ctx2.fillStyle = `rgb(${red}, ${green}, ${blue})`;
 
         // Draw the bar
-        ctx2.fillRect(freq, canvas2.height - value, barWidth, value // Height of the bar
-        );
+        ctx2.fillRect(freq, canvas2.height - value, barWidth, value);
+        //ctx2.fillRect(canvas2.width - barWidth, 0, barWidth, canvas2.height)
         freq += barWidth;
     }
 
 }
 
 function createMovingSpectrogram(X) {
-    const barWidth = 2;
+    const barWidth = 1;
     const binHeight = canvasSpectrum.height / (nFFT / 2);
     ctxSpectrum.drawImage(canvasSpectrum, -barWidth, 0)
-    ctxSpectrum.clearRect(canvasSpectrum.width - barWidth, 0, barWidth, canvasSpectrum.height);
+    ctxSpectrum.clearRect(canvasSpectrum.width - (barWidth), 0, barWidth, canvasSpectrum.height);
     //const windowRatio = nFFT / FRAMESIZE
 
 
@@ -586,14 +576,13 @@ function createMovingSpectrogram(X) {
     if (!melOn) {
 
         X.forEach((intensity, index) => {
-
             const newIntensity = (intensity / SENS) - (CONTRAST)
 
             //const freqAxis = (index / K) * samplingFreq;
             //intensity = (intensity - 0.1) * 10
             ctxSpectrum.fillStyle = intensityToColor(newIntensity, maxValue, minValue);
             ctxSpectrum.fillRect(
-                canvasSpectrum.width - barWidth,           // x-coordinate
+                (canvasSpectrum.width - barWidth),           // x-coordinate
                 canvasSpectrum.height - (index * binHeight * 2),               // y-coordinate
                 barWidth,                        // width
                 binHeight                    // height

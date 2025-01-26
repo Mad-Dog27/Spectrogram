@@ -4,33 +4,48 @@
     box-sizing: border-box;
 }
 
-#container {
-    position: absolute;
-    top: 20;
-    left: 20;
-    background: #f1eeee;
-    width: 100%;
-    height: 85%;
 
+
+#layoutContainer {
+    display: flex;
+    /* Enables side-by-side layout */
+    align-items: flex-start;
+    /* Aligns items at the top */
+    gap: 20px;
+    /* Adds spacing between main box and controls */
+    width: 100%;
+    margin-top: 1px;
+    /* Adds space above the container */
 }
 
-canvas {
-    position: relative;
+#mainBox {
+    flex: 2;
+    height: 100vh;
+    /* The main box takes up more space */
+}
 
+#controls {
+    flex: 1;
+    /* Controls take up less space */
+    display: flex;
+    flex-direction: column;
+    /* Stack the controls vertically */
+    gap: 10px;
+    /* Space between controls */
+}
+
+#canvasSpectrum {
+    margin: 5px;
+    border: 1px solid black;
+    width: 70vw;
+    height: 50vh;
 }
 
 #canvas,
 #canvas2 {
-    width: 600px;
+    width: 25vw;
     height: 300px;
     margin: 10px;
     border: 1px solid black;
     /* Optional: adds border to the canvas for visibility */
-}
-
-#canvasSpectrum {
-    margin: 10px;
-    border: 1px solid black;
-    width: 1200px;
-    height: 400px;
 }
