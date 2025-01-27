@@ -22,6 +22,8 @@ const FRAMESIZE = 2048 / 2; //time domain amount of samples taken
 const nFFT = 4096 / 2; //frequency domain amount zeroes and values aquired through fft
 const overlap = 512;
 const SPEED = 1;
+
+
 let SCALE = 3;
 let SENS = 1;
 let CONTRAST = 0;
@@ -35,6 +37,8 @@ const canvas2 = document.getElementById("canvas2");
 const canvasSpectrum = document.getElementById("canvasSpectrum");
 const ctxSpectrum = canvasSpectrum.getContext("2d");
 
+const timeCanvas = document.getElementById('timeCanvas')
+const ctxTime = timeCanvas.getContext("2d")
 
 const scaleSlider = document.getElementById('scaleSlider');
 const scaleSliderValue = document.getElementById('scaleSliderValue');
@@ -253,7 +257,7 @@ async function getMicData() {
             //drawVisual(analyser); //Create first audio signal graph (NOT MY CODE)
             createSpectrum(slicedMagnitude) //Create somewhat real-time spectrum (MY CODE)
             createMovingSpectrogram(slicedMagnitude); //Create real-time spectrograph (MY CODE)
-
+            timeGraph(timeDomainBuffer)
             if (recordOn) {
                 if (!storedBuffer[chunkIndex]) {
                     storedBuffer[chunkIndex] = timeDomainBuffer;
@@ -341,7 +345,7 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
         // Process and render all chunks up to the expected index
         while (currentChunkIndex <= expectedChunkIndex && currentChunkIndex < numChunks) { //If chunk processing is slower then expected and chunk index has not exceded total number of chunks
             const chunk = addZeroes(chunks[currentChunkIndex]); //Zero Padding
-
+            timeGraph(chunks[currentChunkIndex]);
             // Fast Fourier transform of current chunk, cutting results in half then converting to magnitude
             result[currentChunkIndex] = fft(chunk);
             //result[currentChunkIndex] = result[currentChunkIndex].slice(0, FRAMESIZE / 2);
@@ -557,6 +561,49 @@ function createSpectrum(X) {
     }
 
 }
+
+function timeGraph(chunk) {
+    const barWidth = 1; // Width of the bar
+    const maxHeight = timeCanvas.height; // Centerline of the canvas
+    let value = maxHeight * chunk[511]; // Supports positive and negative values
+
+    // Create a copy of the current canvas
+    const canvasCopy = ctxTime.getImageData(0, 0, timeCanvas.width, timeCanvas.height);
+
+    // Clear the entire canvas
+    ctxTime.clearRect(0, 0, timeCanvas.width, timeCanvas.height);
+
+    // Redraw the copy, shifted left by 1 pixel
+    ctxTime.putImageData(canvasCopy, -1, 0);
+
+    // Clear the rightmost column
+    ctxTime.clearRect(timeCanvas.width - barWidth, 0, barWidth, timeCanvas.height);
+
+    // Draw the new bar based on the value's sign
+    if (value >= 0) {
+        // Positive bar: Draw above the centerline
+        ctxTime.fillRect(
+            timeCanvas.width - barWidth, // X-position (rightmost edge)
+            timeCanvas.height / 2 - value, // Y-position (centerline minus height)
+            barWidth, // Width of the bar
+            value // Positive height
+        );
+    } else {
+        // Negative bar: Draw below the centerline
+        ctxTime.fillRect(
+            timeCanvas.width - barWidth, // X-position (rightmost edge)
+            timeCanvas.height / 2, // Y-position (centerline)
+            barWidth, // Width of the bar
+            -value // Negative height (make it positive for fillRect)
+        );
+    }
+
+}
+canvasSpectrum.width = window.innerWidth * 0.7 - 2;  // 70% of screen width minus borders
+canvasSpectrum.height = window.innerHeight * 0.49 - 2;
+
+timeCanvas.width = window.innerWidth * 0.7 - 2;  // 70% of screen width minus borders
+timeCanvas.height = window.innerHeight * 0.45 - 2;  // 45% of screen height minus borders
 
 function createMovingSpectrogram(X) {
     const barWidth = 1;

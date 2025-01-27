@@ -4,7 +4,13 @@
     box-sizing: border-box;
 }
 
+#timeCanvas {
+    margin: 5px;
 
+    border: 1px solid black;
+    width: 70vw;
+    height: 45vh;
+}
 
 #layoutContainer {
     display: flex;
@@ -38,7 +44,7 @@
     margin: 5px;
     border: 1px solid black;
     width: 70vw;
-    height: 50vh;
+    height: 49vh;
 }
 
 #canvas,
