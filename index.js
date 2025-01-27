@@ -1,81 +1,77 @@
-const processAgainInput = document.getElementById('processAgain');
-const micButtonInput = document.getElementById('Mic');
+/* READ ME
+Purpose of the file is to produce an interactable spectrogram for users to view how their pronounications look,
+while providing the ability to alter the visuals of it. 
+Current uses: -Audio File Input
+              -Microphone Input
+              -Recording and Save mircophone Input
+              -Mel Scaling
+              -DB magnitude - Not working
+              -Colour Scheme
+              -Window Type
 
-const melButtonInput = document.getElementById("melToggle")
-const isMel = document.getElementById('isMel')
+              OUTPUTS:
+              -Spectrogram Output
+              -Waveform Output
+              -Audio Output - Recorded Samples sound weird (sampling frequency problem)
+            
+To do:
 
-const recordButtonInput = document.getElementById('recordToggle')
-const recordValue = document.getElementById('recordValue')
+Make website look way nicer
+Fix Colour Scheme
+Fix standered units output from FFT
+Fix DB
+Fix Mel
+Replace all toggles with good toggles eg if else
 
-const playRecordButton = document.getElementById('playRecord')
+NOTE: may crash your browser :) - Blame timeGraph() function
+*/
 
-const audioFileInput = document.getElementById('audioFileInput');
-// Create an AudioContext
 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
-/*
-const FRAMESIZE = 2048; //time domain amount of samples taken
-const nFFT = 2048; //frequency domain amount zeroes and values aquired through fft
-const overlap = 1024;
-*/
+//Button INputs for inputing Data
+const audioFileInput = document.getElementById('audioFileInput');
+const processAgainInput = document.getElementById('processAgain');
+const micButtonInput = document.getElementById('Mic');
+const recordValue = document.getElementById('recordValue')
+const playRecordButton = document.getElementById('playRecord')
+//Button Inputs for altering graphs
+const melButtonInput = document.getElementById("melToggle")
+const isMel = document.getElementById('isMel')
+const recordButtonInput = document.getElementById('recordToggle')
+const windowSelect = document.getElementById('windowSelect');
+const colourSchemeSelect = document.getElementById('colourSelect');
+//IDs for all three canvas's: Canvas2D, CanvasSpectrum, timeCanvas
+const canvas2D = document.getElementById("canvas2D");
+const ctx2D = canvas2D.getContext("2d");
+const canvasSpectrum = document.getElementById("canvasSpectrum");
+const ctxSpectrum = canvasSpectrum.getContext("2d");
+const timeCanvas = document.getElementById('timeCanvas')
+const ctxTime = timeCanvas.getContext("2d")
+
+
+//Global Constants
 const FRAMESIZE = 2048 / 2; //time domain amount of samples taken
 const nFFT = 4096 / 2; //frequency domain amount zeroes and values aquired through fft
 const overlap = 512;
 const SPEED = 1;
-
-
+//Global Variables
 let SCALE = 3;
 let SENS = 1;
 let CONTRAST = 0;
 let recordOn = false;
 let storedBuffer = [];
-let count = 0;
-const container = document.getElementById("container");
-const canvas = document.getElementById("canvas");
-const canvas2 = document.getElementById("canvas2");
-
-const canvasSpectrum = document.getElementById("canvasSpectrum");
-const ctxSpectrum = canvasSpectrum.getContext("2d");
-
-const timeCanvas = document.getElementById('timeCanvas')
-const ctxTime = timeCanvas.getContext("2d")
-
-const scaleSlider = document.getElementById('scaleSlider');
-const scaleSliderValue = document.getElementById('scaleSliderValue');
-
-const sensSlider = document.getElementById('sensSlider');
-const sensSliderValue = document.getElementById('sensSliderValue');
-
-const contrastSlider = document.getElementById('contrastSlider');
-const contrastSliderValue = document.getElementById('contrastSliderValue');
-
-
-const windowSelect = document.getElementById('windowSelect');
-
-const colourSchemeSelect = document.getElementById('colourSelect');
-
-console.log(`Canvas dimensions: ${canvas2.width}x${canvas2.height}`);
-
-console.log(`Canvas dimensions: ${canvasSpectrum.width}x${canvasSpectrum.height}`);
-
-
-
-
-const ctx2 = canvas2.getContext("2d");
-
-// rectangular, hamming, blackman Harris
-chosenWindow = "blackman Harris"
-chosenColourScheme = 'greyScale'
-
-
 let audioBuffer;
 let fileUpload = null;
 let filePlaying = null;
 let finshedRT = null;
 let micOn = null;
-
 let mel = null;
 let melOn = false;
+
+chosenWindow = "blackman Harris"// rectangular, hamming, blackman Harris
+chosenColourScheme = 'greyScale'
+
+
 
 //Adds an event listnener for the audioFileInput button, when the input file is changed the function will run after the file is changed.
 audioFileInput.addEventListener('change', async (event) => {
@@ -125,7 +121,6 @@ recordButtonInput.addEventListener('click', () => {
         recordOn = false;
         recordValue.textContent = "no"
         //processRecording()
-
     } else {
         recordOn = true;
         recordValue.textContent = "yes"
@@ -168,12 +163,9 @@ colourSchemeSelect.addEventListener('change', (event) => {
 function processRecording() {
     audioBuffer = null;
 
-    console.log(storedBuffer)
     let combinedBuffer = combineBuffers(storedBuffer);
 
 
-    console.log(combinedBuffer)
-    console.log(count)
     audioBuffer = audioContext.createBuffer(
         1, // Number of channels
         combinedBuffer.length, // Length of the buffer
@@ -261,7 +253,6 @@ async function getMicData() {
             if (recordOn) {
                 if (!storedBuffer[chunkIndex]) {
                     storedBuffer[chunkIndex] = timeDomainBuffer;
-                    count = count + timeDomainBuffer.length
                 } else {
                     console.warn("Chunk index already filled, potential overwrite detected.");
                 }
@@ -345,9 +336,12 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
         // Process and render all chunks up to the expected index
         while (currentChunkIndex <= expectedChunkIndex && currentChunkIndex < numChunks) { //If chunk processing is slower then expected and chunk index has not exceded total number of chunks
             const chunk = addZeroes(chunks[currentChunkIndex]); //Zero Padding
+
             timeGraph(chunks[currentChunkIndex]);
             // Fast Fourier transform of current chunk, cutting results in half then converting to magnitude
+
             result[currentChunkIndex] = fft(chunk);
+
             //result[currentChunkIndex] = result[currentChunkIndex].slice(0, FRAMESIZE / 2);
 
             //Updating all Graphs 
@@ -368,7 +362,7 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
         if (currentChunkIndex < numChunks) {
             requestAnimationFrame(updateSpectrogram);
         } else {
-            console.log("iedneifni"); filePlaying = null;
+            filePlaying = null;
         }
     }
 
@@ -494,54 +488,19 @@ function complexExp(angle) {
     };
 }
 
-function drawVisual(analyser) {
-    const bufferLength = analyser.frequencyBinCount;//frequency bin count is a node property, bufferlength is the total num of frequency bins
-    const dataArray = new Uint8Array(bufferLength);
-    const barWidth = canvas.width / bufferLength; //divide the canvas width by freq bin amount to find the width of freq bin
-    analyser.getByteFrequencyData(dataArray); //fills data array with freqeuncy data from audio signal, values represent loudness of each freq bin
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx2.clearRect(0, 0, canvas.width, canvas.height);
-
-
-    let x = 0;
-    let x1 = canvas2.width / 2;
-    let x2 = canvas2.width / 2;
-    for (let i = 0; i < bufferLength; i++) {
-        barHeight = dataArray[i]; //each frequency bin size
-
-        const red = Math.min(255, barHeight * 10);
-        const green = Math.min(255, 255 - barHeight);
-        const blue = Math.min(255, barHeight * 2);
-        ctx.fillStyle = `rgb(${red}, ${green}, ${blue})`;
-        ctx.fillRect(x, (canvas.height - barHeight), barWidth, barHeight);//displaying freq bin size as a bar 
-        /*
-        ctx2.fillStyle = `rgb(${red}, ${green}, ${blue})`;
-        ctx2.fillRect(x1, canvas.height - 5 * barHeight, barWidth, 5 * barHeight);//displaying freq bin size as a bar 
-        ctx2.fillRect(x2, canvas.height - 5 * barHeight, barWidth, 5 * barHeight); // this will continue moving from left to right
-        */
-        x += barWidth;
-        x1 -= barWidth; //moving x position to the right by bar width
-        x2 += barWidth; //moving x position to the right by bar width
-
-    }
-
-
-
-}
 
 
 function createSpectrum(X) {
 
-    ctx2.clearRect(0, 0, canvas2.width, canvas2.height);
+    ctx2D.clearRect(0, 0, canvas2D.width, canvas2D.height);
     //const windowRatio = nFFT / FRAMESIZE
     const K = X.length / 2; // Number of frequency bins
-    const barWidth = canvas2.width / K; // Width of each bar in the spectrum
+    const barWidth = canvas2D.width / K; // Width of each bar in the spectrum
     let freq = 0;
     // Normalize the magnitude values to fit the canvas height
     const maxMagnitude = Math.max(...X);
 
-    const normalizedValues = X.map(value => (value / maxMagnitude) * canvas2.height);
+    const normalizedValues = X.map(value => (value / maxMagnitude) * canvas2D.height);
     for (let i = 0; i < K / 2; i++) {
         //const freq = samplingFreq * (1 / K) * i; // Frequency (scaled for display purposes)
 
@@ -552,21 +511,31 @@ function createSpectrum(X) {
         const red = Math.min(255, value * 10);
         const green = Math.min(255, 255 - value * 5);
         const blue = Math.min(255, value * 2);
-        ctx2.fillStyle = `rgb(${red}, ${green}, ${blue})`;
+        ctx2D.fillStyle = `rgb(${red}, ${green}, ${blue})`;
 
         // Draw the bar
-        ctx2.fillRect(freq, canvas2.height - value, barWidth, value);
-        //ctx2.fillRect(canvas2.width - barWidth, 0, barWidth, canvas2.height)
+        ctx2D.fillRect(freq, canvas2D.height - value, barWidth, value);
+        //ctx2D.fillRect(canvas2.width - barWidth, 0, barWidth, canvas2.height)
         freq += barWidth;
     }
 
 }
-
+function average(chunk) {
+    const length = chunk.length;
+    let sum = 0;
+    let average = 0
+    for (let i = 500; i < 520; i++) {
+        sum += chunk[i];
+    }
+    average = sum / 10;
+    console.log(average)
+    return average;
+}
 function timeGraph(chunk) {
+
     const barWidth = 1; // Width of the bar
     const maxHeight = timeCanvas.height; // Centerline of the canvas
     let value = maxHeight * chunk[511]; // Supports positive and negative values
-
     // Create a copy of the current canvas
     const canvasCopy = ctxTime.getImageData(0, 0, timeCanvas.width, timeCanvas.height);
 
@@ -599,6 +568,7 @@ function timeGraph(chunk) {
     }
 
 }
+
 canvasSpectrum.width = window.innerWidth * 0.7 - 2;  // 70% of screen width minus borders
 canvasSpectrum.height = window.innerHeight * 0.49 - 2;
 
