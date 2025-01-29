@@ -172,9 +172,10 @@ widthSlider.addEventListener('input', () => {
     //Sensitivity slider display and use, on new input
     WIDTH = widthSlider.value; //Storing new value in SENS
     canvasSpectrum.width = window.innerWidth * WIDTH - 2;  // 70% of screen width minus borders
+    timeCanvas.width = window.innerWidth * WIDTH - 2;  // 70% of screen width minus borders
 
     widthSliderValue.textContent = WIDTH; // Update the display
-    console.log(`Senitivity: ${WIDTH}`);
+    console.log(`Width: ${WIDTH}`);
 });
 function processRecording() {
     audioBuffer = null;
@@ -260,6 +261,14 @@ async function getMicData() {
             const result = fft(chunk); //FAST FOURIER TRANSFORM
             const dataMagnitude = result.map(bin => bin.magnitude);
             const slicedMagnitude = dataMagnitude.slice(0, nFFT / 2)
+
+            const datadB = result.map(bin => bin.dB);
+            const sliceddB = dataMagnitude.slice(0, nFFT / 2)
+
+
+
+
+
 
             createSpectrum(slicedMagnitude) //Create somewhat real-time spectrum (MY CODE)
             createMovingSpectrogram(slicedMagnitude); //Create real-time spectrograph (MY CODE)
@@ -354,15 +363,19 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
             timeGraph(chunks[currentChunkIndex]);
             // Fast Fourier transform of current chunk, cutting results in half then converting to magnitude
 
-            result[currentChunkIndex] = fft(chunk);
+            result = fft(chunk);
 
             //result[currentChunkIndex] = result[currentChunkIndex].slice(0, FRAMESIZE / 2);
 
             //Updating all Graphs 
-            const dataMagnitude = result[currentChunkIndex].map(bin => bin.magnitude);
+            const dataMagnitude = result.map(bin => bin.magnitude);
             const slicedMagnitude = dataMagnitude.slice(0, nFFT / 2)
+            const minMagnitude = Math.min(...slicedMagnitude);
+            const maxMagnitude = Math.max(...slicedMagnitude);
 
-            const datadB = result[currentChunkIndex].map(bin => bin.dB);
+            console.log("min: ", minMagnitude)
+            console.log("max: ", maxMagnitude)
+            const datadB = result.map(bin => bin.dB);
             const slicedDb = datadB.slice(0, nFFT / 2)
 
             //drawVisual(analyser)
@@ -660,47 +673,43 @@ function melScale() {
     }
     return melBins;
 }
-
 function intensityToColor(intensity, maxValue, minValue) {
-    const normValue = (intensity - minValue) / (maxValue - minValue)
-    const scaledValue = Math.floor((1 - normValue) * 255)
+    const noiseThreshold = 0.01; // Define a threshold for noise (adjust as needed)
+    const range = maxValue - minValue;
 
-    const value = Math.floor((1 - intensity) * 255); // Map 0-1 to 0-255
+    // Ensure the range is valid, avoid dividing by zero
+    let normValue;
+    if (range === 0) {
+        normValue = 0; // Handle edge case where max and min are equal
+    } else if (intensity < noiseThreshold) {
+        normValue = 0; // Treat very small values as noise
+    } else {
+        normValue = (intensity - minValue) / range;
+        normValue = Math.max(0, Math.min(normValue, 1)); // Clamp to [0, 1]
+    }
+
     let r, g, b;
 
-    /*if (chosenColourScheme == "greyScale") {
-        if (maxValue > 0.1) {
-            r = scaledValue;
-            g = scaledValue;
-            b = scaledValue;
-        } else {
-            r = 255;
-            g = 255;
-            b = 255;
-        }
-    }*/
-    if (chosenColourScheme == "greyScale") {
-        if (maxValue > 0) {
-            r = value;
-            g = value;
-            b = value;
-        } else {
-            r = value;
-            g = value;
-            b = value;
-        }
+    if (chosenColourScheme === "greyScale") {
+        // Map normalized intensity to grayscale
+        const value = Math.floor((1 - normValue) * 255);
+        r = value;
+        g = value;
+        b = value;
     }
-    if (chosenColourScheme == "heatedMetal") {
-        if (intensity <= 0.33) {
+
+    if (chosenColourScheme === "heatedMetal") {
+        // Map normalized intensity to a heated metal color scheme
+        if (normValue <= 0.33) {
             // Red to Orange transition
             r = 255;
-            g = Math.floor(255 * (intensity / 0.33)); // Scale green from 0 to 255
+            g = Math.floor(255 * (normValue / 0.33));
             b = 0;
-        } else if (intensity <= 0.66) {
+        } else if (normValue <= 0.66) {
             // Orange to Yellow transition
             r = 255;
             g = 255;
-            b = Math.floor(255 * (((1 - intensity) - 0.33) / 0.33)); // Scale blue from 0 to 255
+            b = Math.floor(255 * ((normValue - 0.33) / 0.33));
         } else {
             // Yellow to White transition
             r = 255;
@@ -711,6 +720,46 @@ function intensityToColor(intensity, maxValue, minValue) {
 
     return `rgb(${r}, ${g}, ${b})`;
 }
+/*
+function intensityToColor(intensity, maxValue, minValue) {
+    const range = maxValue - minValue;
+    let normValue;
+    if (!micOn) {
+        normValue = range === 0 ? 0 : (intensity - minValue) / range; // Normalize intensity to [0, 1]
+    } else {
+        normValue = intensity;
+    }
+    let r, g, b;
+
+    if (chosenColourScheme === "greyScale") {
+        const value = Math.floor((1 - normValue) * 255); // Map normalized intensity to grayscale
+        r = value;
+        g = value;
+        b = value;
+    }
+
+    if (chosenColourScheme === "heatedMetal") {
+        if (normValue <= 0.33) {
+            // Red to Orange transition
+            r = 255;
+            g = Math.floor(255 * (normValue / 0.33));
+            b = 0;
+        } else if (normValue <= 0.66) {
+            // Orange to Yellow transition
+            r = 255;
+            g = 255;
+            b = Math.floor(255 * ((normValue - 0.33) / 0.33));
+        } else {
+            // Yellow to White transition
+            r = 255;
+            g = 255;
+            b = 255;
+        }
+    }
+
+    return `rgb(${r}, ${g}, ${b})`;
+}*/
+
 
 
 
