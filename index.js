@@ -40,6 +40,10 @@ const isMel = document.getElementById('isMel')
 const recordButtonInput = document.getElementById('recordToggle')
 const windowSelect = document.getElementById('windowSelect');
 const colourSchemeSelect = document.getElementById('colourSelect');
+
+const widthSlider = document.getElementById('widthSlider');
+const widthSliderValue = document.getElementById('widthSliderValue');
+
 //IDs for all three canvas's: Canvas2D, CanvasSpectrum, timeCanvas
 const canvas2D = document.getElementById("canvas2D");
 const ctx2D = canvas2D.getContext("2d");
@@ -54,6 +58,7 @@ const FRAMESIZE = 2048 / 2; //time domain amount of samples taken
 const nFFT = 4096 / 2; //frequency domain amount zeroes and values aquired through fft
 const overlap = 512;
 const SPEED = 1;
+
 //Global Variables
 let SCALE = 3;
 let SENS = 1;
@@ -67,6 +72,9 @@ let finshedRT = null;
 let micOn = null;
 let mel = null;
 let melOn = false;
+
+let WIDTH = 0.7;    //0.7
+let HEIGHT = 0.49;  //0.49  DOESNT EFFECT - No point
 
 chosenWindow = "blackman Harris"// rectangular, hamming, blackman Harris
 chosenColourScheme = 'greyScale'
@@ -82,7 +90,7 @@ audioFileInput.addEventListener('change', async (event) => {
     const arrayBuffer = await file.arrayBuffer(); //Read the file as an ArrayBuffer which is a binary representation of the audio file to use in the next line
     audioBuffer = await audioContext.decodeAudioData(arrayBuffer);//Uses the binary version to create an audio buffer
 
-    melScale()
+    mel = melScale()
     // Process the audio buffer (e.g., generate a spectrogram)
     filePlaying = true;
     processAudioBuffer(audioBuffer);
@@ -160,6 +168,14 @@ colourSchemeSelect.addEventListener('change', (event) => {
     console.log(`Colour Scheme Selected: ${chosenColourScheme}`);
 });
 
+widthSlider.addEventListener('input', () => {
+    //Sensitivity slider display and use, on new input
+    WIDTH = widthSlider.value; //Storing new value in SENS
+    canvasSpectrum.width = window.innerWidth * WIDTH - 2;  // 70% of screen width minus borders
+
+    widthSliderValue.textContent = WIDTH; // Update the display
+    console.log(`Senitivity: ${WIDTH}`);
+});
 function processRecording() {
     audioBuffer = null;
 
@@ -245,8 +261,6 @@ async function getMicData() {
             const dataMagnitude = result.map(bin => bin.magnitude);
             const slicedMagnitude = dataMagnitude.slice(0, nFFT / 2)
 
-
-            //drawVisual(analyser); //Create first audio signal graph (NOT MY CODE)
             createSpectrum(slicedMagnitude) //Create somewhat real-time spectrum (MY CODE)
             createMovingSpectrogram(slicedMagnitude); //Create real-time spectrograph (MY CODE)
             timeGraph(timeDomainBuffer)
@@ -322,7 +336,7 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
     let magnitudes = [];
     let result = [];
     let currentChunkIndex = 0;
-    mel = melScale();
+    //mel = melScale();
     audioContext.resume()
     // Start audio playback
     source.start(0);
@@ -569,10 +583,10 @@ function timeGraph(chunk) {
 
 }
 
-canvasSpectrum.width = window.innerWidth * 0.7 - 2;  // 70% of screen width minus borders
-canvasSpectrum.height = window.innerHeight * 0.49 - 2;
+canvasSpectrum.width = window.innerWidth * WIDTH - 2;  // 70% of screen width minus borders
+canvasSpectrum.height = window.innerHeight * HEIGHT - 2;
 
-timeCanvas.width = window.innerWidth * 0.7 - 2;  // 70% of screen width minus borders
+timeCanvas.width = window.innerWidth * WIDTH - 2;  // 70% of screen width minus borders
 timeCanvas.height = window.innerHeight * 0.45 - 2;  // 45% of screen height minus borders
 
 function createMovingSpectrogram(X) {
@@ -632,6 +646,8 @@ function melScale() {
     if (audioBuffer) {
         maxFreq = audioBuffer.sampleRate / 2;
     }
+    console.log(maxFreq)
+    maxFreq = 8000;
     const maxMel = 2595 * Math.log10(1 + maxFreq / 700);
     let melBins = new Array(numBins);
 
