@@ -55,11 +55,11 @@ const ctxTime = timeCanvas.getContext("2d")
 
 
 //Global Constants
-const FRAMESIZE = 2048 / 2; //time domain amount of samples taken
-const nFFT = 4096 / 2; //frequency domain amount zeroes and values aquired through fft
+const FRAMESIZE = 1024; //time domain amount of samples taken
+const nFFT = 2048; //frequency domain amount zeroes and values aquired through fft
 const overlap = 512;
 const SPEED = 1;
-
+const SAMPLEFREQ = 48000;
 //Global Variables
 let SCALE = 3;
 let SENS = 1;
@@ -84,7 +84,7 @@ chosenMagnitudeScale = "magnitude"
 
 
 //Adds an event listnener for the audioFileInput button, when the input file is changed the function will run after the file is changed.
-audioFileInput.addEventListener('change', async (event) => {
+audioFileInput.addEventListener('change', async (event) => { //AUDIO FILE INPUT
     const file = event.target.files[0]; // file list of all the inputed files, [0] means only one file will be used
     if (!file) return;
     if (micOn) { console.log("Microphone is still recording"); return; }
@@ -99,7 +99,7 @@ audioFileInput.addEventListener('change', async (event) => {
 });
 
 
-processAgainInput.addEventListener('click', () => {
+processAgainInput.addEventListener('click', () => {//  PROCCESS AGAIN
     //Event listener to process the audio file again, will happen on click
     if (!fileUpload) { console.log("No input file selected"); return; }
     if (filePlaying) { console.log("File is currently playing"); return; }
@@ -234,9 +234,49 @@ function combineBuffers(buffers) {
 
     return combinedBuffer;
 }
+async function resampleAudio(audioBuffer) {
+    const originalSampleFreq = audioBuffer.sampleRate;
 
+    if (originalSampleFreq == SAMPLEFREQ) {
+        return audioBuffer;
+    }
 
+    const offlineContext = new OfflineAudioContext(
+        audioBuffer.numberOfChannels,
+        Math.ceil(audioBuffer.length * (SAMPLEFREQ / originalSampleFreq)),
+        SAMPLEFREQ
+    );
+    const source = offlineContext.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(offlineContext.destination);
 
+    source.start(0);
+
+    const newBuffer = await offlineContext.startRendering();
+    return newBuffer;
+}
+
+function resampleBuffer(buffer, deviceRate, targetRate) {
+    const resampleRatio = deviceRate / targetRate;
+    const newLength = Math.floor(buffer.length / resampleRatio);
+    const resampledBuffer = new Float32Array(newLength);
+
+    for (let i = 0; i < newLength; i++) {
+        const index = i * resampleRatio;
+        const lower = Math.floor(index);
+        const upper = Math.ceil(index);
+
+        if (upper < buffer.length) {
+            const weight = index - lower;
+            resampledBuffer[i] =
+                (1 - weight) * buffer[lower] + weight * buffer[upper];
+        } else {
+            resampledBuffer[i] = buffer[lower];
+        }
+    }
+
+    return resampledBuffer;
+}
 
 async function getMicData() {
     try {
@@ -244,10 +284,11 @@ async function getMicData() {
         // Requesting microphone acces and waiting, then creating a mediastream from it
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         const mediaStreamSource = audioContext.createMediaStreamSource(stream);
+        const deviceSampleRate = audioContext.sampleRate;
 
         // Create an AnalyserNode for real-time frequency domain analysis
         const analyser = audioContext.createAnalyser();
-        analyser.fftSize = FRAMESIZE;
+        analyser.fftSize = nFFT;
         mediaStreamSource.connect(analyser);
 
         // Array to store time-domain or frequency-domain data
@@ -257,6 +298,8 @@ async function getMicData() {
         function processMicInput() {
             //New array/Buffer to store the audio samples
             let timeDomainBuffer = new Float32Array(FRAMESIZE);
+            //analyser.sampleRate = 16000;
+            //console.log(analyser.sampleRate)
 
             /*In the audio file processing, I store the audio data myself, but in this case I am not able to access
             the audio buffer, so am making use of getFloatTimeDomainData which stores the audio data from the analyser
@@ -264,7 +307,12 @@ async function getMicData() {
             NOTE: getFloatFrequencyData could also be used to obtain the frequency magnitudes But I prefer to use my maths*/
             analyser.getFloatTimeDomainData(timeDomainBuffer);
 
-            const chunk = addZeroes(applyWindow(timeDomainBuffer));//Applying a window AND zero padding, the function above defaults to rectangular window
+            const resampledTimeDomainBuffer = resampleBuffer(
+                timeDomainBuffer,
+                deviceSampleRate,
+                SAMPLEFREQ
+            )
+            const chunk = addZeroes(applyWindow(resampledTimeDomainBuffer));//Applying a window AND zero padding, the function above defaults to rectangular window
             const result = fft(chunk); //FAST FOURIER TRANSFORM
 
             if (chosenMagnitudeScale == "magnitude") {
@@ -308,13 +356,15 @@ async function getMicData() {
 }
 
 
-function processAudioBuffer(audioBuffer) {
+async function processAudioBuffer(audioBuffer) {
     //Outputting the Audiobuffer characterestics
     console.log('Audio Buffer:', audioBuffer);
     console.log('Sample Rate:', audioBuffer.sampleRate);
     console.log('Number of Channels:', audioBuffer.numberOfChannels);
     console.log('Duration (s):', audioBuffer.duration);
     console.log(audioBuffer.length);
+
+    audioBuffer = await resampleAudio(audioBuffer);
     //Exectuting the FFT for file input
     const source = audioContext.createBufferSource();
     source.buffer = audioBuffer;
@@ -340,7 +390,9 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
 
     /*For the next step, the audioBuffer needs to be cut into respective chunks for audioProccessing, 
     first the chunk characteristics need to be determined*/
+    audioBuffer.sampleRate = 16000;
     const sampleRate = audioBuffer.sampleRate;
+    console.log(sampleRate)
     const effectiveChunkSize = FRAMESIZE - overlap; //Subracting overlap, as that portion of chunk is accounted for in the next
     const chunkDuration = effectiveChunkSize / sampleRate; // Duration of one chunk in seconds
 
@@ -727,6 +779,7 @@ function intensityToColor(intensity, maxValue, minValue) {
 
 
     } else if (chosenMagnitudeScale == "deciBels") {
+
         if (chosenColourScheme == "neon") {
             if (range == 0) {
                 normValue = 0;
@@ -750,6 +803,14 @@ function intensityToColor(intensity, maxValue, minValue) {
                 r = 255;
                 g = 0;
                 b = 255;
+            }
+
+            if (chosenColourScheme === "greyScale") {
+                // Map normalized intensity to grayscale
+                const value = Math.floor((1 - normValue) * 255);
+                r = value;
+                g = value;
+                b = value;
             }
         }
     }
