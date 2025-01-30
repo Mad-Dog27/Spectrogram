@@ -40,6 +40,7 @@ const isMel = document.getElementById('isMel')
 const recordButtonInput = document.getElementById('recordToggle')
 const windowSelect = document.getElementById('windowSelect');
 const colourSchemeSelect = document.getElementById('colourSelect');
+const magnitudeSelect = document.getElementById('magnitudeSelect')
 
 const widthSlider = document.getElementById('widthSlider');
 const widthSliderValue = document.getElementById('widthSliderValue');
@@ -72,12 +73,13 @@ let finshedRT = null;
 let micOn = null;
 let mel = null;
 let melOn = false;
-
+let REFERENCE = 2 ^ 15;
 let WIDTH = 0.7;    //0.7
 let HEIGHT = 0.49;  //0.49  DOESNT EFFECT - No point
 
 chosenWindow = "blackman Harris"// rectangular, hamming, blackman Harris
 chosenColourScheme = 'greyScale'
+chosenMagnitudeScale = "magnitude"
 
 
 
@@ -109,7 +111,6 @@ processAgainInput.addEventListener('click', () => {
 
 })
 melButtonInput.addEventListener('click', () => {
-    //Event listener to process the audio file again, will happen on click
 
     if (melOn) {
         melOn = null;
@@ -121,6 +122,12 @@ melButtonInput.addEventListener('click', () => {
     console.log("Mel toggled")
 
 })
+
+magnitudeSelect.addEventListener('change', (event) => {
+    //Changing the window value, between Rectangular, hamming and blackman-harris
+    chosenMagnitudeScale = event.target.value;
+    console.log(`Window function selected: ${chosenMagnitudeScale}`);
+});
 
 recordButtonInput.addEventListener('click', () => {
     //Event listener to process the audio file again, will happen on click
@@ -259,19 +266,18 @@ async function getMicData() {
 
             const chunk = addZeroes(applyWindow(timeDomainBuffer));//Applying a window AND zero padding, the function above defaults to rectangular window
             const result = fft(chunk); //FAST FOURIER TRANSFORM
-            const dataMagnitude = result.map(bin => bin.magnitude);
-            const slicedMagnitude = dataMagnitude.slice(0, nFFT / 2)
 
-            const datadB = result.map(bin => bin.dB);
-            const sliceddB = dataMagnitude.slice(0, nFFT / 2)
+            if (chosenMagnitudeScale == "magnitude") {
+                const dataMagnitude = result.map(bin => bin.magnitude);
+                chosenValues = dataMagnitude.slice(0, nFFT / 2)
+            } else {
+                const datadB = result.map(bin => bin.dB);
+                chosenValues = datadB.slice(0, nFFT / 2)
+            }
+            //drawVisual(analyser)
+            createSpectrum(chosenValues);
+            createMovingSpectrogram(chosenValues);
 
-
-
-
-
-
-            createSpectrum(slicedMagnitude) //Create somewhat real-time spectrum (MY CODE)
-            createMovingSpectrogram(slicedMagnitude); //Create real-time spectrograph (MY CODE)
             timeGraph(timeDomainBuffer)
             if (recordOn) {
                 if (!storedBuffer[chunkIndex]) {
@@ -342,7 +348,7 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
     const chunks = sliceIntoChunks(audioBuffer); // NOTE: sliceIntoChunks function also applies window
     const numChunks = chunks.length;
 
-    let magnitudes = [];
+    let chosenValues;
     let result = [];
     let currentChunkIndex = 0;
     //mel = melScale();
@@ -368,19 +374,19 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
             //result[currentChunkIndex] = result[currentChunkIndex].slice(0, FRAMESIZE / 2);
 
             //Updating all Graphs 
-            const dataMagnitude = result.map(bin => bin.magnitude);
-            const slicedMagnitude = dataMagnitude.slice(0, nFFT / 2)
-            const minMagnitude = Math.min(...slicedMagnitude);
-            const maxMagnitude = Math.max(...slicedMagnitude);
+            if (chosenMagnitudeScale == "magnitude") {
+                const dataMagnitude = result.map(bin => bin.magnitude);
+                chosenValues = dataMagnitude.slice(0, nFFT / 2)
+            } else {
+                const datadB = result.map(bin => bin.dB);
+                chosenValues = datadB.slice(0, nFFT / 2)
 
-            console.log("min: ", minMagnitude)
-            console.log("max: ", maxMagnitude)
-            const datadB = result.map(bin => bin.dB);
-            const slicedDb = datadB.slice(0, nFFT / 2)
 
+
+            }
             //drawVisual(analyser)
-            createSpectrum(slicedMagnitude);
-            createMovingSpectrogram(slicedMagnitude);
+            createSpectrum(chosenValues);
+            createMovingSpectrogram(chosenValues);
 
             currentChunkIndex++; //incrementing chunk index
         }
@@ -502,7 +508,7 @@ function fft(input) {
         combined[k + N / 2].magnitude = Math.sqrt(
             combined[k + N / 2].real ** 2 + combined[k + N / 2].imag ** 2
         );
-        combined[k + N / 2].dB = 20 * Math.log10(combined[k + N / 2].magnitude);
+        combined[k + N / 2].dB = 20 * Math.log10(combined[k + N / 2].magnitude / REFERENCE);
         //magnitude[k] = Math.sqrt(combined[k].real ** 2 + combined[k].imag ** 2);
     }
 
@@ -673,30 +679,87 @@ function melScale() {
     }
     return melBins;
 }
+
 function intensityToColor(intensity, maxValue, minValue) {
-    const noiseThreshold = 0.01; // Define a threshold for noise (adjust as needed)
+    const noiseThreshold = 0.1; // Define a threshold for noise (adjust as needed)
     const range = maxValue - minValue;
+    let r, g, b;
 
     // Ensure the range is valid, avoid dividing by zero
     let normValue;
-    if (range === 0) {
-        normValue = 0; // Handle edge case where max and min are equal
-    } else if (intensity < noiseThreshold) {
-        normValue = 0; // Treat very small values as noise
-    } else {
-        normValue = (intensity - minValue) / range;
-        normValue = Math.max(0, Math.min(normValue, 1)); // Clamp to [0, 1]
+    if (chosenMagnitudeScale == "magnitude") {
+        if (range == 0) {
+            normValue = 0; // Handle edge case where max and min are equal
+        } else if (intensity < noiseThreshold) {
+            normValue = 0; // Treat very small values as noise
+        } else {
+            normValue = (intensity - minValue) / range;
+            normValue = Math.max(0, Math.min(normValue, 1)); // Clamp to [0, 1]
+        }
+
+
+        if (chosenColourScheme === "greyScale") {
+            // Map normalized intensity to grayscale
+            const value = Math.floor((1 - normValue) * 255);
+            r = value;
+            g = value;
+            b = value;
+        }
+        if (chosenColourScheme === "heatedMetal") {
+            // Map normalized intensity to a heated metal color scheme
+            if (normValue <= 0.33) {
+                // Red to Orange transition
+                r = 255;
+                g = Math.floor(255 * (normValue / 0.33));
+                b = 0;
+            } else if (normValue <= 0.66) {
+                // Orange to Yellow transition
+                r = 255;
+                g = 255;
+                b = Math.floor(255 * ((normValue - 0.33) / 0.33));
+            } else {
+                // Yellow to White transition
+                r = 255;
+                g = 255;
+                b = 255;
+            }
+        }
+
+
+    } else if (chosenMagnitudeScale == "deciBels") {
+        if (chosenColourScheme == "neon") {
+            if (range == 0) {
+                normValue = 0;
+            } else if (intensity < -150) {
+                r = 128;
+                g = 0;
+                b = 128;
+            } else if (intensity < -100) {
+                r = 0;
+                g = 0;
+                b = 128;
+            } else if (intensity < -50) {
+                r = 0;
+                g = 0;
+                b = 255;
+            } else if (intensity < 0) {
+                r = 0;
+                g = 255;
+                b = 255;
+            } else {
+                r = 255;
+                g = 0;
+                b = 255;
+            }
+        }
     }
 
-    let r, g, b;
 
-    if (chosenColourScheme === "greyScale") {
-        // Map normalized intensity to grayscale
-        const value = Math.floor((1 - normValue) * 255);
-        r = value;
-        g = value;
-        b = value;
-    }
+
+
+
+
+    /*
 
     if (chosenColourScheme === "heatedMetal") {
         // Map normalized intensity to a heated metal color scheme
@@ -716,39 +779,39 @@ function intensityToColor(intensity, maxValue, minValue) {
             g = 255;
             b = 255;
         }
-    }
+    }*/
 
     return `rgb(${r}, ${g}, ${b})`;
 }
+
+
 /*
 function intensityToColor(intensity, maxValue, minValue) {
-    const range = maxValue - minValue;
-    let normValue;
-    if (!micOn) {
-        normValue = range === 0 ? 0 : (intensity - minValue) / range; // Normalize intensity to [0, 1]
-    } else {
-        normValue = intensity;
-    }
+    const normValue = (intensity - minValue) / (maxValue - minValue)
+    const scaledValue = Math.floor((1 - normValue) * 255)
+
+    const value = Math.floor((1 - intensity) * 255); // Map 0-1 to 0-255
     let r, g, b;
 
-    if (chosenColourScheme === "greyScale") {
-        const value = Math.floor((1 - normValue) * 255); // Map normalized intensity to grayscale
-        r = value;
-        g = value;
-        b = value;
-    }
 
-    if (chosenColourScheme === "heatedMetal") {
-        if (normValue <= 0.33) {
+    if (chosenColourScheme == "greyScale") {
+
+        r = scaledValue;
+        g = scaledValue;
+        b = scaledValue;
+
+    }
+    if (chosenColourScheme == "heatedMetal") {
+        if (intensity <= 0.33) {
             // Red to Orange transition
             r = 255;
-            g = Math.floor(255 * (normValue / 0.33));
+            g = Math.floor(255 * (intensity / 0.33)); // Scale green from 0 to 255
             b = 0;
-        } else if (normValue <= 0.66) {
+        } else if (intensity <= 0.66) {
             // Orange to Yellow transition
             r = 255;
             g = 255;
-            b = Math.floor(255 * ((normValue - 0.33) / 0.33));
+            b = Math.floor(255 * (((1 - intensity) - 0.33) / 0.33)); // Scale blue from 0 to 255
         } else {
             // Yellow to White transition
             r = 255;
@@ -758,9 +821,7 @@ function intensityToColor(intensity, maxValue, minValue) {
     }
 
     return `rgb(${r}, ${g}, ${b})`;
-}*/
-
-
-
+}
+*/
 
 
