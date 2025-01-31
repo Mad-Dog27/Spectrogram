@@ -59,7 +59,7 @@ const FRAMESIZE = 1024; //time domain amount of samples taken
 const nFFT = 2048; //frequency domain amount zeroes and values aquired through fft
 const overlap = 512;
 const SPEED = 1;
-const SAMPLEFREQ = 48000;
+const SAMPLEFREQ = 16000;
 //Global Variables
 let SCALE = 3;
 let SENS = 1;
@@ -186,14 +186,14 @@ widthSlider.addEventListener('input', () => {
 });
 function processRecording() {
     audioBuffer = null;
-
+    console.log(storedBuffer)
     let combinedBuffer = combineBuffers(storedBuffer);
 
-
+    console.log(combinedBuffer)
     audioBuffer = audioContext.createBuffer(
         1, // Number of channels
         combinedBuffer.length, // Length of the buffer
-        48000 // Sample rate
+        16000 // Sample rate
     );
 
     // Copy the combined buffer into the AudioBuffer
@@ -205,21 +205,18 @@ function processRecording() {
     source.connect(audioContext.destination);
     source.start(0);
 
-    processAudioBuffer(audioBuffer);    /*
-    for (let currentChunk = 0; currentChunk < numChunk; currentChunk++) {
-        const chunk = addZeroes(applyWindow(storedBuffer[currentChunk]))
-        const result = fft(chunk);
-
-        const dataMagnitude = result.map(bin => bin.magnitude);
-        const slicedMagnitude = dataMagnitude.slice(0, nFFT / 2);
-        createMovingSpectrogram(slicedMagnitude); //Create real-time spectrograph (MY CODE)
-
-    }*/
+    processAudioBuffer(audioBuffer);
 
 }
 function combineBuffers(buffers) {
     // Calculate total length, subtracting overlap for transitions
-    const totalLength = buffers.reduce((sum, buf) => sum + buf.length, 0) - overlap * (buffers.length - 1);
+    let size = 0;
+    buffers.forEach((chunk, index) => {
+        size += chunk.length;
+    })
+    console.log(size)
+
+    const totalLength = size;
     const combinedBuffer = new Float32Array(totalLength);
 
     let offset = 0; // Starting position in the combinedBuffer
@@ -231,7 +228,6 @@ function combineBuffers(buffers) {
         // Move the offset forward, accounting for overlap
         offset += buffer.length - overlap;
     });
-
     return combinedBuffer;
 }
 async function resampleAudio(audioBuffer) {
@@ -329,7 +325,7 @@ async function getMicData() {
             timeGraph(timeDomainBuffer)
             if (recordOn) {
                 if (!storedBuffer[chunkIndex]) {
-                    storedBuffer[chunkIndex] = timeDomainBuffer;
+                    storedBuffer[chunkIndex] = resampledTimeDomainBuffer;
                 } else {
                     console.warn("Chunk index already filled, potential overwrite detected.");
                 }
@@ -390,16 +386,14 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
 
     /*For the next step, the audioBuffer needs to be cut into respective chunks for audioProccessing, 
     first the chunk characteristics need to be determined*/
-    audioBuffer.sampleRate = 16000;
     const sampleRate = audioBuffer.sampleRate;
-    console.log(sampleRate)
     const effectiveChunkSize = FRAMESIZE - overlap; //Subracting overlap, as that portion of chunk is accounted for in the next
     const chunkDuration = effectiveChunkSize / sampleRate; // Duration of one chunk in seconds
 
     // Slice the audio into chunks
     const chunks = sliceIntoChunks(audioBuffer); // NOTE: sliceIntoChunks function also applies window
     const numChunks = chunks.length;
-
+    console.log(chunks)
     let chosenValues;
     let result = [];
     let currentChunkIndex = 0;
@@ -422,7 +416,6 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
             // Fast Fourier transform of current chunk, cutting results in half then converting to magnitude
 
             result = fft(chunk);
-
             //result[currentChunkIndex] = result[currentChunkIndex].slice(0, FRAMESIZE / 2);
 
             //Updating all Graphs 
