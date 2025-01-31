@@ -179,7 +179,7 @@ widthSlider.addEventListener('input', () => {
     //Sensitivity slider display and use, on new input
     WIDTH = widthSlider.value; //Storing new value in SENS
     canvasSpectrum.width = window.innerWidth * WIDTH - 2;  // 70% of screen width minus borders
-    timeCanvas.width = window.innerWidth * WIDTH - 2;  // 70% of screen width minus borders
+    timeCanvas.width = window.innerWidth * (WIDTH * 3) - 2;  // 70% of screen width minus borders
 
     widthSliderValue.textContent = WIDTH; // Update the display
     console.log(`Width: ${WIDTH}`);
