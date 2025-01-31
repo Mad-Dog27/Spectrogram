@@ -57,7 +57,7 @@ const ctxTime = timeCanvas.getContext("2d")
 //Global Constants
 const FRAMESIZE = 1024; //time domain amount of samples taken
 const nFFT = 2048; //frequency domain amount zeroes and values aquired through fft
-const overlap = 512;
+let overlap = 512;
 const SPEED = 1;
 const SAMPLEFREQ = 16000;
 //Global Variables
@@ -76,7 +76,7 @@ let melOn = false;
 let REFERENCE = 2 ^ 15;
 let WIDTH = 0.7;    //0.7
 let HEIGHT = 0.49;  //0.49  DOESNT EFFECT - No point
-
+let RecordProcessing = false;
 chosenWindow = "blackman Harris"// rectangular, hamming, blackman Harris
 chosenColourScheme = 'greyScale'
 chosenMagnitudeScale = "magnitude"
@@ -193,7 +193,7 @@ function processRecording() {
     audioBuffer = audioContext.createBuffer(
         1, // Number of channels
         combinedBuffer.length, // Length of the buffer
-        16000 // Sample rate
+        SAMPLEFREQ // Sample rate
     );
 
     // Copy the combined buffer into the AudioBuffer
@@ -204,6 +204,7 @@ function processRecording() {
     source.buffer = audioBuffer;
     source.connect(audioContext.destination);
     source.start(0);
+    RecordProcessing = true;
 
     processAudioBuffer(audioBuffer);
 
@@ -225,8 +226,8 @@ function combineBuffers(buffers) {
             // Add the sample to the combinedBuffer, taking overlap into account
             combinedBuffer[offset + i] += buffer[i];
         }
-        // Move the offset forward, accounting for overlap
-        offset += buffer.length - overlap;
+        // Move the offset forward
+        offset += buffer.length;
     });
     return combinedBuffer;
 }
@@ -236,7 +237,7 @@ async function resampleAudio(audioBuffer) {
     if (originalSampleFreq == SAMPLEFREQ) {
         return audioBuffer;
     }
-
+    console.log("NOTRETURN")
     const offlineContext = new OfflineAudioContext(
         audioBuffer.numberOfChannels,
         Math.ceil(audioBuffer.length * (SAMPLEFREQ / originalSampleFreq)),
@@ -359,7 +360,6 @@ async function processAudioBuffer(audioBuffer) {
     console.log('Number of Channels:', audioBuffer.numberOfChannels);
     console.log('Duration (s):', audioBuffer.duration);
     console.log(audioBuffer.length);
-
     audioBuffer = await resampleAudio(audioBuffer);
     //Exectuting the FFT for file input
     const source = audioContext.createBufferSource();
@@ -389,7 +389,7 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
     const sampleRate = audioBuffer.sampleRate;
     const effectiveChunkSize = FRAMESIZE - overlap; //Subracting overlap, as that portion of chunk is accounted for in the next
     const chunkDuration = effectiveChunkSize / sampleRate; // Duration of one chunk in seconds
-
+    console.log(sampleRate)
     // Slice the audio into chunks
     const chunks = sliceIntoChunks(audioBuffer); // NOTE: sliceIntoChunks function also applies window
     const numChunks = chunks.length;
@@ -427,7 +427,6 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
                 chosenValues = datadB.slice(0, nFFT / 2)
 
 
-
             }
             //drawVisual(analyser)
             createSpectrum(chosenValues);
@@ -449,7 +448,11 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
 }
 
 function sliceIntoChunks(audioBuffer) {
+    let tempOverlap = overlap;
 
+    if (RecordProcessing) {
+        overlap = 0;
+    }
     const monoChannel = audioBuffer.getChannelData(0);
     if (audioBuffer.numberOfChannels >= 2) {
         const samples1 = audioBuffer.getChannelData(1);
@@ -469,7 +472,7 @@ function sliceIntoChunks(audioBuffer) {
         //const chunk = audioBuffer.getChannelData(0).slice(offset, offset + bufferLength);
         chunks.push(windowedChunk);
     }
-
+    overlap = tempOverlap;
     return chunks
 }
 
@@ -553,10 +556,10 @@ function fft(input) {
         combined[k + N / 2].magnitude = Math.sqrt(
             combined[k + N / 2].real ** 2 + combined[k + N / 2].imag ** 2
         );
-        combined[k + N / 2].dB = 20 * Math.log10(combined[k + N / 2].magnitude / REFERENCE);
+        combined[k + N / 2].dB = 20 * Math.log10(combined[k + N / 2].magnitude / 1);
         //magnitude[k] = Math.sqrt(combined[k].real ** 2 + combined[k].imag ** 2);
     }
-
+    //console.log(Math.max(...combined.map(c => c.magnitude)));
     return combined;
 }
 function complexExp(angle) {
@@ -610,47 +613,49 @@ function average(chunk) {
     return average;
 }
 function timeGraph(chunk) {
+    for (let i = 0; i < 601; i += 300) {
 
-    const barWidth = 1; // Width of the bar
-    const maxHeight = timeCanvas.height; // Centerline of the canvas
-    let value = maxHeight * chunk[511]; // Supports positive and negative values
-    // Create a copy of the current canvas
-    const canvasCopy = ctxTime.getImageData(0, 0, timeCanvas.width, timeCanvas.height);
 
-    // Clear the entire canvas
-    ctxTime.clearRect(0, 0, timeCanvas.width, timeCanvas.height);
+        const barWidth = 1; // Width of the bar
+        const maxHeight = timeCanvas.height; // Centerline of the canvas
+        let value = maxHeight * chunk[i]; // Supports positive and negative values
+        // Create a copy of the current canvas
+        const canvasCopy = ctxTime.getImageData(0, 0, timeCanvas.width, timeCanvas.height);
 
-    // Redraw the copy, shifted left by 1 pixel
-    ctxTime.putImageData(canvasCopy, -1, 0);
+        // Clear the entire canvas
+        ctxTime.clearRect(0, 0, timeCanvas.width, timeCanvas.height);
 
-    // Clear the rightmost column
-    ctxTime.clearRect(timeCanvas.width - barWidth, 0, barWidth, timeCanvas.height);
+        // Redraw the copy, shifted left by 1 pixel
+        ctxTime.putImageData(canvasCopy, -1, 0);
 
-    // Draw the new bar based on the value's sign
-    if (value >= 0) {
-        // Positive bar: Draw above the centerline
-        ctxTime.fillRect(
-            timeCanvas.width - barWidth, // X-position (rightmost edge)
-            timeCanvas.height / 2 - value, // Y-position (centerline minus height)
-            barWidth, // Width of the bar
-            value // Positive height
-        );
-    } else {
-        // Negative bar: Draw below the centerline
-        ctxTime.fillRect(
-            timeCanvas.width - barWidth, // X-position (rightmost edge)
-            timeCanvas.height / 2, // Y-position (centerline)
-            barWidth, // Width of the bar
-            -value // Negative height (make it positive for fillRect)
-        );
+        // Clear the rightmost column
+        ctxTime.clearRect(timeCanvas.width - barWidth, 0, barWidth, timeCanvas.height);
+
+        // Draw the new bar based on the value's sign
+        if (value >= 0) {
+            // Positive bar: Draw above the centerline
+            ctxTime.fillRect(
+                timeCanvas.width - barWidth, // X-position (rightmost edge)
+                timeCanvas.height / 2 - value, // Y-position (centerline minus height)
+                barWidth, // Width of the bar
+                value // Positive height
+            );
+        } else {
+            // Negative bar: Draw below the centerline
+            ctxTime.fillRect(
+                timeCanvas.width - barWidth, // X-position (rightmost edge)
+                timeCanvas.height / 2, // Y-position (centerline)
+                barWidth, // Width of the bar
+                -value // Negative height (make it positive for fillRect)
+            );
+        }
     }
-
 }
 
 canvasSpectrum.width = window.innerWidth * WIDTH - 2;  // 70% of screen width minus borders
 canvasSpectrum.height = window.innerHeight * HEIGHT - 2;
 
-timeCanvas.width = window.innerWidth * WIDTH - 2;  // 70% of screen width minus borders
+timeCanvas.width = window.innerWidth * (WIDTH * 3) - 2;  // 70% of screen width minus borders
 timeCanvas.height = window.innerHeight * 0.45 - 2;  // 45% of screen height minus borders
 
 function createMovingSpectrogram(X) {
@@ -741,16 +746,25 @@ function intensityToColor(intensity, maxValue, minValue) {
             normValue = (intensity - minValue) / range;
             normValue = Math.max(0, Math.min(normValue, 1)); // Clamp to [0, 1]
         }
+        const value = Math.floor((1 - normValue) * 255);
 
 
-        if (chosenColourScheme === "greyScale") {
+        if (chosenColourScheme == "greyScale") {
             // Map normalized intensity to grayscale
-            const value = Math.floor((1 - normValue) * 255);
             r = value;
             g = value;
             b = value;
-        }
-        if (chosenColourScheme === "heatedMetal") {
+        } else if (chosenColourScheme == "neon") {
+            if (range != 0) {
+                r = 255 - value;
+                g = value;
+                b = 255;
+            } else {
+                r = 0;
+                g = 255;
+                b = 255;
+            }
+        } else if (chosenColourScheme == "heatedMetal") {
             // Map normalized intensity to a heated metal color scheme
             if (normValue <= 0.33) {
                 // Red to Orange transition
@@ -772,68 +786,48 @@ function intensityToColor(intensity, maxValue, minValue) {
 
 
     } else if (chosenMagnitudeScale == "deciBels") {
+        const minIntensity = -150;
+        const maxIntensity = 0;
+        let normalized = Math.max(0, Math.min(1, (intensity - minIntensity) / (maxIntensity - minIntensity)));
+        let normalizedPowered = Math.pow((normalized), 5)
+        let value = Math.round((1 - normalizedPowered) * 255);
+        // Map normalized value to grayscale
+        // console.log(normalized)
+        if (chosenColourScheme == "greyScale") {
+            if (range != 0) {
+                // Normalize intensity to a 0-255 scale (clamped to -150 dB to 0 dB)
 
-        if (chosenColourScheme == "neon") {
-            if (range == 0) {
-                normValue = 0;
-            } else if (intensity < -150) {
-                r = 128;
-                g = 0;
-                b = 128;
-            } else if (intensity < -100) {
-                r = 0;
-                g = 0;
-                b = 128;
-            } else if (intensity < -50) {
-                r = 0;
-                g = 0;
+
+                r = g = b = value;
+            } else {
+                r = g = b = 255; // Default black if range is 0
+            }
+        } else if (chosenColourScheme == "neon") {
+            if (range != 0) {
+                r = 255 - value;
+                g = value;
                 b = 255;
-            } else if (intensity < 0) {
+            } else {
                 r = 0;
                 g = 255;
                 b = 255;
-            } else {
-                r = 255;
-                g = 0;
-                b = 255;
             }
+        } else if (chosenColourScheme == "heatedMetal") {
+            if (range != 0) {
+                // Spread value across red to yellow to orange to red range
+                r = Math.min(255, value * 2); // Red increases with value
+                g = Math.min(255, value * 1.5); // Green is less intense than red
+                b = Math.max(0, 255 - value); // Blue decreases as value increases
+            } else {
+                r = 255; // Default to full red when range is 0
+                g = 255; // Yellow at full intensity
+                b = 0;
 
-            if (chosenColourScheme === "greyScale") {
-                // Map normalized intensity to grayscale
-                const value = Math.floor((1 - normValue) * 255);
-                r = value;
-                g = value;
-                b = value;
+
             }
         }
     }
 
-
-
-
-
-
-    /*
-
-    if (chosenColourScheme === "heatedMetal") {
-        // Map normalized intensity to a heated metal color scheme
-        if (normValue <= 0.33) {
-            // Red to Orange transition
-            r = 255;
-            g = Math.floor(255 * (normValue / 0.33));
-            b = 0;
-        } else if (normValue <= 0.66) {
-            // Orange to Yellow transition
-            r = 255;
-            g = 255;
-            b = Math.floor(255 * ((normValue - 0.33) / 0.33));
-        } else {
-            // Yellow to White transition
-            r = 255;
-            g = 255;
-            b = 255;
-        }
-    }*/
 
     return `rgb(${r}, ${g}, ${b})`;
 }
