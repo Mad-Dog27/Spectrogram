@@ -23,12 +23,20 @@
             <input type="file" id="audioFileInput" accept=".wav" />
             <button id="processAgain">Process Again</button>
             <button id="Mic">Toggle Microphone</button>
-            <br><br>
+
 
 
             <label for="widthSlider">Width Scale: </label>
             <input type="range" id="widthSlider" min="0.1" max="2" value="0.7" step="0.05">
             <p>Width: <span id="widthSliderValue">0.7</span></p>
+
+            <label for="sampleFreqSlider">Sampling Frequency: </label>
+            <input type="range" id="sampleFreqSlider" min="8000" max="48000" value="16000" step="8000">
+            <p>Sampling Frequency: <span id="sampleFreqSliderValue">16000</span> Hz</p>
+
+            <label for="overlapPercSlider">Overlap: </label>
+            <input type="range" id="overlapPercSlider" min="0" max="0.5" value="0.25" step=".05">
+            <p>Overlap: <span id="overlapPercSliderValue">0.25</span> %</p>
 
             <label for="magnitudeSelect">Choose the magnitude scale:</label>
             <select id="magnitudeSelect">
@@ -51,11 +59,15 @@
 
             </select>
 
-            <button id="melToggle">Toggle Mel</button>
-            <p>Mel: <span id="isMel">off</span></p>
+            <button id="melToggle">
+                <p>Mel: <span id="isMel">off</span></p>
+            </button>
 
-            <button id="recordToggle">Toggle Recording</button>
-            <p>Recording: <span id="recordValue">no</span></p>
+
+            <button id="recordToggle">
+                <p>Recording: <span id="recordValue">no</span></p>
+            </button>
+
             <button id="playRecord">Play recording</button>
             <div id="smallBox">
                 <canvas id="canvas2D"></canvas>

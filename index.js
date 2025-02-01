@@ -45,6 +45,11 @@ const magnitudeSelect = document.getElementById('magnitudeSelect')
 const widthSlider = document.getElementById('widthSlider');
 const widthSliderValue = document.getElementById('widthSliderValue');
 
+const sampleFreqSlider = document.getElementById('sampleFreqSlider');
+const sampleFreqSliderValue = document.getElementById('sampleFreqSliderValue');
+
+const overlapPercSlider = document.getElementById('overlapPercSlider');
+const overlapPercSliderValue = document.getElementById('overlapPercSliderValue');
 //IDs for all three canvas's: Canvas2D, CanvasSpectrum, timeCanvas
 const canvas2D = document.getElementById("canvas2D");
 const ctx2D = canvas2D.getContext("2d");
@@ -57,9 +62,10 @@ const ctxTime = timeCanvas.getContext("2d")
 //Global Constants
 const FRAMESIZE = 1024; //time domain amount of samples taken
 const nFFT = 2048; //frequency domain amount zeroes and values aquired through fft
-let overlap = 512;
+let overlapPercent = 0.25;
+let overlap = FRAMESIZE * overlapPercent;
 const SPEED = 1;
-const SAMPLEFREQ = 16000;
+let SAMPLEFREQ = 16000;
 //Global Variables
 let SCALE = 3;
 let SENS = 1;
@@ -183,6 +189,19 @@ widthSlider.addEventListener('input', () => {
 
     widthSliderValue.textContent = WIDTH; // Update the display
     console.log(`Width: ${WIDTH}`);
+});
+
+sampleFreqSlider.addEventListener('input', () => {//Function to update the INputed Sampling freq, this will improved freqeuency resolution but only untill you reach the original inputed frequency
+    SAMPLEFREQ = sampleFreqSlider.value; //
+    sampleFreqSliderValue.textContent = SAMPLEFREQ; // Update the display
+    console.log(`FS: ${SAMPLEFREQ}`);
+});
+
+overlapPercSlider.addEventListener('input', () => {//Function to update the INputed Sampling freq, this will improved freqeuency resolution but only untill you reach the original inputed frequency
+    overlapPercent = overlapPercSlider.value; //
+    overlapPercSliderValue.textContent = overlapPercent; // Update the display
+    overlap = FRAMESIZE * overlapPercent;
+
 });
 function processRecording() {
     audioBuffer = null;
@@ -613,29 +632,29 @@ function average(chunk) {
     return average;
 }
 function timeGraph(chunk) {
-    for (let i = 0; i < 601; i += 300) {
 
 
-        const barWidth = 1; // Width of the bar
-        const maxHeight = timeCanvas.height; // Centerline of the canvas
-        let value = maxHeight * chunk[i]; // Supports positive and negative values
-        // Create a copy of the current canvas
-        const canvasCopy = ctxTime.getImageData(0, 0, timeCanvas.width, timeCanvas.height);
+    const barWidth = 1; // Width of the bar
+    const maxHeight = timeCanvas.height; // Centerline of the canvas
+    // Create a copy of the current canvas
+    const canvasCopy = ctxTime.getImageData(0, 0, timeCanvas.width, timeCanvas.height);
 
-        // Clear the entire canvas
-        ctxTime.clearRect(0, 0, timeCanvas.width, timeCanvas.height);
+    // Clear the entire canvas
+    ctxTime.clearRect(0, 0, timeCanvas.width, timeCanvas.height);
 
-        // Redraw the copy, shifted left by 1 pixel
-        ctxTime.putImageData(canvasCopy, -1, 0);
+    // Redraw the copy, shifted left by 1 pixel
+    ctxTime.putImageData(canvasCopy, -3, 0);
 
-        // Clear the rightmost column
-        ctxTime.clearRect(timeCanvas.width - barWidth, 0, barWidth, timeCanvas.height);
+    // Clear the rightmost column
+    ctxTime.clearRect(timeCanvas.width - (3 * barWidth), 0, 3 * barWidth, timeCanvas.height);
+    for (let i = 3; i > 0; i--) {
+        let value = maxHeight * chunk[i * 200]; // Supports positive and negative values
 
         // Draw the new bar based on the value's sign
         if (value >= 0) {
             // Positive bar: Draw above the centerline
             ctxTime.fillRect(
-                timeCanvas.width - barWidth, // X-position (rightmost edge)
+                timeCanvas.width - (i * barWidth), // X-position (rightmost edge)
                 timeCanvas.height / 2 - value, // Y-position (centerline minus height)
                 barWidth, // Width of the bar
                 value // Positive height
@@ -643,7 +662,7 @@ function timeGraph(chunk) {
         } else {
             // Negative bar: Draw below the centerline
             ctxTime.fillRect(
-                timeCanvas.width - barWidth, // X-position (rightmost edge)
+                timeCanvas.width - (i * barWidth), // X-position (rightmost edge)
                 timeCanvas.height / 2, // Y-position (centerline)
                 barWidth, // Width of the bar
                 -value // Negative height (make it positive for fillRect)
