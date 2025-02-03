@@ -65,7 +65,7 @@ const ctxTime = timeCanvas.getContext("2d")
 
 //Global Constants
 const FRAMESIZE = 1024; //time domain amount of samples taken
-const nFFT = 2048; //frequency domain amount zeroes and values aquired through fft
+const nFFT = 2048 * 1; //frequency domain amount zeroes and values aquired through fft
 let overlapPercent = 0.25;
 let overlap = FRAMESIZE * overlapPercent;
 const SPEED = 1;
@@ -695,14 +695,15 @@ function createMovingSpectrogram(X) {
     // Convert bin index to frequency
     const nyquist = SAMPLEFREQ / 2; // Nyquist frequency
     if (!melOn) {
-
+        const ratio = SAMPLEFREQ / 16000;
         X.forEach((intensity, index) => {
+
             //(index / nFFT) * SAMPLEFREQ / 2
             const newIntensity = (intensity / SENS) - (CONTRAST);
             const frequency = (index / (nFFT / 2)) * nyquist;
 
             if (frequency <= 8000) {
-                const yPosition = canvasSpectrum.height - (frequency / nyquist) * canvasSpectrum.height * SAMPLEFREQ / 16000;
+                const yPosition = canvasSpectrum.height - (frequency / nyquist) * canvasSpectrum.height * ratio;
 
                 //const freqAxis = (index / K) * samplingFreq;
                 //intensity = (intensity - 0.1) * 10
@@ -711,7 +712,7 @@ function createMovingSpectrogram(X) {
                     (canvasSpectrum.width - barWidth),           // x-coordinate
                     yPosition,               // y-coordinate
                     barWidth,                        // width
-                    binHeight                    // height
+                    binHeight * ratio                    // height
                 );
             }
         });
@@ -912,7 +913,7 @@ function intensityToColor(intensity, maxValue, minValue) {
 
 function drawAxisLabel() {
     const labelChunkeness = 2;
-    const numLabels = 16;
+    const numLabels = 20;
     const labelWidth = 10;
     if (!melOn) {
         ctxAxis.clearRect(canvasAxis.width - 51, 0, 51, canvasAxis.height)
@@ -940,7 +941,7 @@ function drawAxisLabel() {
 
             const melValue = mel[n * melNum];
 
-            ctxAxis.fillText(label, canvasAxis.width - 51, canvasAxis.height - melValue); // Adjust position as needed
+            ctxAxis.fillText(label, canvasAxis.width - 51, canvasAxis.height - melValue + 4); // Adjust position as needed
             ctxAxis.fillRect(
                 canvasAxis.width - labelWidth,
                 canvasAxis.height - melValue,
