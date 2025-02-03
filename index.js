@@ -920,7 +920,7 @@ function drawAxisLabel() {
         const labelHeight = canvasAxis.height / numLabels;
 
         for (let n = 0; n <= numLabels; n++) {
-            const label = `${((SAMPLEFREQ / 2) / numLabels) * n} Hz`; // Example frequency labels
+            const label = `${((16000 / 2) / numLabels) * n} Hz`; // Example frequency labels
             ctxAxis.fillText(label, canvasAxis.width - 51, canvasAxis.height - n * labelHeight + 4); // Adjust position as needed
 
             ctxAxis.fillRect(
