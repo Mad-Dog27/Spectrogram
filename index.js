@@ -61,11 +61,12 @@ const ctxAxis = canvasAxis.getContext('2d');
 const ctxSpectrum = canvasSpectrum.getContext("2d");
 const timeCanvas = document.getElementById('timeCanvas')
 const ctxTime = timeCanvas.getContext("2d")
+let timeDiffs = []
 
 
 //Global Constants
-const FRAMESIZE = 1024; //time domain amount of samples taken
-const nFFT = 2048 * 1; //frequency domain amount zeroes and values aquired through fft
+let FRAMESIZE = 1024; //time domain amount of samples taken
+const nFFT = 2048 / 1; //frequency domain amount zeroes and values aquired through fft
 let overlapPercent = 0.25;
 let overlap = FRAMESIZE * overlapPercent;
 const SPEED = 1;
@@ -84,7 +85,7 @@ let micOn = null;
 let mel = null;
 let melOn = false;
 let melProcessed = false;
-
+let isDB = null;
 let REFERENCE = 2 ^ 15;
 let WIDTH = 0.7;    //0.7
 let HEIGHT = 0.7;  //0.49  DOESNT EFFECT - No point
@@ -126,6 +127,12 @@ processAgainInput.addEventListener('click', () => {//  PROCCESS AGAIN
     if (filePlaying) { console.log("File is currently playing"); return; }
     if (micOn) { console.log("Mircophone Audio is currently playing"); return; }
     filePlaying = true;
+    let sum = 0;
+    for (let i = 0; i < timeDiffs.length; i++) {
+        sum += timeDiffs[i]
+    }
+    const avg = sum / timeDiffs.length
+    console.log(avg)
 
     console.log("proccessing again")
     processAudioBuffer(audioBuffer);
@@ -165,6 +172,7 @@ magnitudeSelect.addEventListener('change', (event) => {
     //Changing the window value, between Rectangular, hamming and blackman-harris
     chosenMagnitudeScale = event.target.value;
     console.log(`Window function selected: ${chosenMagnitudeScale}`);
+    if (chosenMagnitudeScale == "deciBels") { isDB = true; }
 });
 windowSelect.addEventListener('change', (event) => {
     //Changing the window value, between Rectangular, hamming and blackman-harris
@@ -440,24 +448,34 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
     // Start audio playback
     source.start(0);
     const startTime = audioContext.currentTime;
-
+    let prevTime = startTime;
+    console.log(startTime)
+    let n = 0
+    let m = 0;
     // Function to update the spectrogram
     function updateSpectrogram() {
         // Calculate the expected chunk index based on current playback time
         const elapsedTime = audioContext.currentTime - startTime;
         const expectedChunkIndex = Math.floor(elapsedTime / chunkDuration);
+        //EACH ITERATION IS APPROXX 0.018s
+        if (n != 0) {
+            timeDiffs[n] = (audioContext.currentTime - startTime - prevTime)
+        } else {
+            timeDiffs[0] = 0;
+        }
+        n++
         // Process and render all chunks up to the expected index
         while (currentChunkIndex <= expectedChunkIndex && currentChunkIndex < numChunks) { //If chunk processing is slower then expected and chunk index has not exceded total number of chunks
             const chunk = addZeroes(chunks[currentChunkIndex]); //Zero Padding
-
-            timeGraph(chunks[currentChunkIndex]);
+            m++
+            //timeGraph(chunks[currentChunkIndex]);
             // Fast Fourier transform of current chunk, cutting results in half then converting to magnitude
 
             result = fft(chunk);
             //result[currentChunkIndex] = result[currentChunkIndex].slice(0, FRAMESIZE / 2);
 
             //Updating all Graphs 
-            if (chosenMagnitudeScale == "magnitude") {
+            if (!isDB) {
                 const dataMagnitude = result.map(bin => bin.magnitude);
                 chosenValues = dataMagnitude.slice(0, nFFT / 2)
             } else {
@@ -479,10 +497,15 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
         } else {
             filePlaying = null;
         }
+        prevTime = elapsedTime;
+
     }
 
     // Start updating the spectrogram
+    let sum
+
     requestAnimationFrame(updateSpectrogram);
+
 }
 
 function fft(input) {
@@ -523,12 +546,12 @@ function fft(input) {
         }
 
         combined[k].magnitude = Math.sqrt(combined[k].real ** 2 + combined[k].imag ** 2);
-        combined[k].dB = 20 * Math.log10(combined[k].magnitude);
+        if (isDB) { combined[k].dB = 20 * Math.log10(combined[k].magnitude); }
 
         combined[k + N / 2].magnitude = Math.sqrt(
             combined[k + N / 2].real ** 2 + combined[k + N / 2].imag ** 2
         );
-        combined[k + N / 2].dB = 20 * Math.log10(combined[k + N / 2].magnitude / 1);
+        if (isDB) { combined[k + N / 2].dB = 20 * Math.log10(combined[k + N / 2].magnitude / 1); }
         //magnitude[k] = Math.sqrt(combined[k].real ** 2 + combined[k].imag ** 2);
     }
     //console.log(Math.max(...combined.map(c => c.magnitude)));
@@ -728,7 +751,7 @@ function createMovingSpectrogram(X) {
             if (intensity <= canvasSpectrum.height) {
                 let melHeight = binHeight;
                 if ((index > 0) && (index < nFFT / 2)) {
-                    melHeight = (-mel[index - 1] + mel[index + 1]) / 2
+                    melHeight = (-mel[index - 1] + mel[index + 1])
                 }
 
                 ctxSpectrum.fillStyle = intensityToColor(X[index], maxValue, minValue);
@@ -736,7 +759,7 @@ function createMovingSpectrogram(X) {
                     canvasSpectrum.width - barWidth,           // x-coordinate
                     canvasSpectrum.height - mel[ratio * index],               // y-coordinate
                     barWidth,                        // width
-                    melHeight * ratio                        // height
+                    melHeight                // height
                 );
             } else {
                 //console.log(`Index: ${index}, Frequency: ${frequency.toFixed(2)} Hz`);
@@ -759,6 +782,7 @@ function intensityToColor(intensity, maxValue, minValue) {
     // Ensure the range is valid, avoid dividing by zero
     let normValue;
     if (chosenMagnitudeScale == "magnitude") {
+
         if (range == 0) {
             normValue = 0; // Handle edge case where max and min are equal
         } else if (intensity < noiseThreshold) {
@@ -767,9 +791,9 @@ function intensityToColor(intensity, maxValue, minValue) {
             normValue = (intensity - minValue) / range;
             normValue = Math.max(0, Math.min(normValue, 1)); // Clamp to [0, 1]
         }
-        const value = Math.floor((1 - normValue) * 255);
 
 
+        const value = Math.floor((1 - intensity) * 255); // Map 0-1 to 0-255
         if (chosenColourScheme == "greyScale") {
             // Map normalized intensity to grayscale
             r = value;
@@ -777,9 +801,11 @@ function intensityToColor(intensity, maxValue, minValue) {
             b = value;
         } else if (chosenColourScheme == "neon") {
             if (range != 0) {
+
                 r = 255 - value;
                 g = value;
                 b = 255;
+
             } else {
                 r = 0;
                 g = 255;
@@ -803,6 +829,39 @@ function intensityToColor(intensity, maxValue, minValue) {
                 g = 255;
                 b = 255;
             }
+        } else if (chosenColourScheme == "fancy") {
+
+            if (normValue <= 0.2) {
+                // Dark red to red (low magnitude)
+                r = 40 + Math.floor(128 * (normValue / 0.2)); // 0 to 128
+                g = 0;
+                b = 0;
+            } else if (normValue <= 0.3) {
+                r = 90 + Math.floor(128 * (normValue / 0.2)); // 0 to 128
+                g = 0;
+                b = 0;
+            } else if (normValue <= 0.4) {
+                // Red to yellow
+                r = 158 + Math.floor(127 * ((normValue - 0.2) / 0.2)); // 128 to 255
+                g = Math.floor(255 * ((normValue - 0.2) / 0.2)); // 0 to 255
+                b = 0;
+            } else if (normValue <= 0.5) {
+                // Yellow to cyan
+                r = Math.floor(255 * (1 - (normValue - 0.4) / 0.2)); // 255 to 0
+                g = 255;
+                b = Math.floor(255 * ((normValue - 0.4) / 0.2)); // 0 to 255
+            } else if (normValue <= 0.8) {
+                // Cyan to blue
+                r = 0;
+                g = Math.floor(255 * (1 - (normValue - 0.6) / 0.2)); // 255 to 0
+                b = 255;
+            } else {
+                // Blue to dark blue (high magnitude)
+                r = 0;
+                g = 0;
+                b = Math.floor(255 * (1 - (normValue - 0.8) / 0.2)); // 255 to 0
+            }
+
         }
 
 
@@ -855,7 +914,7 @@ function intensityToColor(intensity, maxValue, minValue) {
 
 function melScale() {
     const numBins = nFFT / 2;
-    let maxFreq = 16000 / 2;
+    let maxFreq = SAMPLEFREQ / 2;
     //melOn = true;
     const maxMel = 2595 * Math.log10(1 + maxFreq / 700);
     let melBins = new Array(numBins);
