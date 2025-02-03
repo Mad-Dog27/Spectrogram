@@ -9,7 +9,7 @@
 
     border: 1px solid black;
     width: 70vw;
-    height: 45vh;
+    height: 20vh;
 }
 
 #layoutContainer {
@@ -40,14 +40,32 @@
     /* Space between controls */
 }
 
+.canvasWrapper {
+    position: relative;
+    width: 100%;
+    /* Match your desired layout width */
+    height: 70vh;
+    /* Match your desired layout height */
+}
+
 #canvasSpectrum {
     margin: 5px;
     border: 1px solid black;
     width: 70vw;
-    height: 49vh;
+    height: 70vh;
 }
 
-#canvas,
+#canvasAxis {
+    margin: 5px;
+    border: 1px solid black;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 70vw;
+    height: 70vh;
+
+}
+
 #canvas2D {
     width: 25vw;
     height: 300px;
