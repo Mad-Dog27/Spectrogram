@@ -537,7 +537,7 @@ function fft(input) {
 function sliceIntoChunks(audioBuffer) {
     let tempOverlap = overlap;
 
-    if (RecordProcessing) {
+    if (RecordProcessing) {//DOUBLE CHECK THIS
         overlap = 0;
     }
     const monoChannel = audioBuffer.getChannelData(0);
@@ -702,7 +702,7 @@ function createMovingSpectrogram(X) {
             const frequency = (index / (nFFT / 2)) * nyquist;
 
             if (frequency <= 8000) {
-                const yPosition = canvasSpectrum.height - (frequency / nyquist) * canvasSpectrum.height;
+                const yPosition = canvasSpectrum.height - (frequency / nyquist) * canvasSpectrum.height * SAMPLEFREQ / 16000;
 
                 //const freqAxis = (index / K) * samplingFreq;
                 //intensity = (intensity - 0.1) * 10
@@ -716,23 +716,32 @@ function createMovingSpectrogram(X) {
             }
         });
     } else {
+        const ratio = Math.ceil(SAMPLEFREQ / 16000);
         if (!melProcessed) {
             mel = melScale()
         }
         mel.forEach((intensity, index) => {
-            let melHeight = binHeight;
-            if ((index > 0) & (index < nFFT / 2)) {
-                melHeight = (mel[index - 1] - mel[index + 1]) / 2
+            const maxMel = 2595 * Math.log10(1 + (SAMPLEFREQ / 2) / 700); // Maximum mel value (Nyquist frequency)
+            const val = (index / mel.length) * maxMel;
+            const frequency = 700 * (10 ** ((val / 2595) - 1))
+            if (intensity <= canvasSpectrum.height) {
+                let melHeight = binHeight;
+                if ((index > 0) && (index < nFFT / 2)) {
+                    melHeight = (-mel[index - 1] + mel[index + 1]) / 2
+                }
+
+                ctxSpectrum.fillStyle = intensityToColor(X[index], maxValue, minValue);
+                ctxSpectrum.fillRect(
+                    canvasSpectrum.width - barWidth,           // x-coordinate
+                    canvasSpectrum.height - mel[ratio * index],               // y-coordinate
+                    barWidth,                        // width
+                    melHeight * ratio                        // height
+                );
+            } else {
+                //console.log(`Index: ${index}, Frequency: ${frequency.toFixed(2)} Hz`);
             }
-            melHeight = melHeight / 1
-            ctxSpectrum.fillStyle = intensityToColor(X[index], maxValue, minValue);
-            ctxSpectrum.fillRect(
-                canvasSpectrum.width - barWidth,           // x-coordinate
-                canvasSpectrum.height - mel[index],               // y-coordinate
-                barWidth,                        // width
-                melHeight                        // height
-            );
         })
+
 
 
 
@@ -845,7 +854,7 @@ function intensityToColor(intensity, maxValue, minValue) {
 
 function melScale() {
     const numBins = nFFT / 2;
-    let maxFreq = SAMPLEFREQ / 2;
+    let maxFreq = 16000 / 2;
     //melOn = true;
     const maxMel = 2595 * Math.log10(1 + maxFreq / 700);
     let melBins = new Array(numBins);
@@ -927,7 +936,7 @@ function drawAxisLabel() {
         const melNum = Math.floor(mel.length / numLabels);
 
         for (let n = 0; n <= numLabels; n++) {
-            const label = `${((SAMPLEFREQ / 2) / numLabels) * n} Hz`; // Example frequency labels
+            const label = `${((16000 / 2) / numLabels) * n} Hz`; // Example frequency labels
 
             const melValue = mel[n * melNum];
 
