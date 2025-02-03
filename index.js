@@ -924,20 +924,12 @@ function drawAxisLabel() {
         }
     } else {
         ctxAxis.clearRect(canvasAxis.width - 51, 0, 51, canvasAxis.height)
-        const maxMel = 2595 * Math.log10(1 + 8000 / 700);
-
         const melNum = Math.floor(mel.length / numLabels);
-        let prevMel = 0;
-        for (let n = 0; n <= numLabels; n++) {
-            const frequency = 700 * (10 ** ((mel[n * melNum] * maxMel / canvasAxis.height) / 2595) - 1);
-            const label = `${frequency} Hz`; // Example frequency labels
 
-            if (n > 0) {
-                prevMel = mel[(n - 1) * melNum]
-            }
+        for (let n = 0; n <= numLabels; n++) {
+            const label = `${((SAMPLEFREQ / 2) / numLabels) * n} Hz`; // Example frequency labels
 
             const melValue = mel[n * melNum];
-            const value = (melValue / canvasAxis.height) * SAMPLEFREQ / 2;
 
             ctxAxis.fillText(label, canvasAxis.width - 51, canvasAxis.height - melValue); // Adjust position as needed
             ctxAxis.fillRect(
