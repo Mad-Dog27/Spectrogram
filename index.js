@@ -42,6 +42,9 @@ const windowSelect = document.getElementById('windowSelect');
 const colourSchemeSelect = document.getElementById('colourSelect');
 const magnitudeSelect = document.getElementById('magnitudeSelect')
 
+const frameSizeSlider = document.getElementById('frameSizeSlider');
+const frameSizeSliderValue = document.getElementById('frameSizeSliderValue');
+
 const widthSlider = document.getElementById('widthSlider');
 const widthSliderValue = document.getElementById('widthSliderValue');
 
@@ -65,10 +68,10 @@ let timeDiffs = []
 
 
 //Global Constants
-let FRAMESIZE = 1024; //time domain amount of samples taken
-const nFFT = 2048 / 1; //frequency domain amount zeroes and values aquired through fft
+let FRAMESIZE = 128; //time domain amount of samples taken
+let nFFT = 1024; //frequency domain amount zeroes and values aquired through fft
 let overlapPercent = 0.25;
-let overlap = FRAMESIZE * overlapPercent;
+let overlap = Math.round(FRAMESIZE * overlapPercent);
 const SPEED = 1;
 let SAMPLEFREQ = 16000;
 //Global Variables
@@ -101,6 +104,8 @@ canvasAxis.height = canvasSpectrum.height;
 
 timeCanvas.width = window.innerWidth * (WIDTH * 3) - 2;  // 70% of screen width minus borders
 timeCanvas.height = window.innerHeight * 0.45 - 2;  // 45% of screen height minus borders
+
+const timeCanvasRelativeWidth = (timeCanvas.width + 2) - 2
 drawAxisLabel();
 
 
@@ -184,13 +189,18 @@ colourSchemeSelect.addEventListener('change', (event) => {
     chosenColourScheme = event.target.value;
     console.log(`Colour Scheme Selected: ${chosenColourScheme}`);
 });
+frameSizeSlider.addEventListener('input', () => {
+    FRAMESIZE = parseInt(frameSizeSlider.value, 10);
+    frameSizeSliderValue.textContent = FRAMESIZE;
+    overlap = Math.round(FRAMESIZE * overlapPercent);
 
+})
 widthSlider.addEventListener('input', () => {
     //Sensitivity slider display and use, on new input
     WIDTH = widthSlider.value; //Storing new value in SENS
     canvasSpectrum.width = window.innerWidth * WIDTH - 2;  // 70% of screen width minus borders
-    timeCanvas.width = window.innerWidth * (WIDTH * 3) - 2;  // 70% of screen width minus borders
-
+    timeCanvas.width = window.innerWidth * (WIDTH) - 2;  // 70% of screen width minus borders
+    timeCanvasRelativeWidth = (timeCanvas.width + 2) * 3 - 2
     widthSliderValue.textContent = WIDTH; // Update the display
     console.log(`Width: ${WIDTH}`);
 });
@@ -452,6 +462,9 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
     console.log(startTime)
     let n = 0
     let m = 0;
+    let alter = true;
+    let b = 0;
+    let sum = 0;
     // Function to update the spectrogram
     function updateSpectrogram() {
         // Calculate the expected chunk index based on current playback time
@@ -463,12 +476,15 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
         } else {
             timeDiffs[0] = 0;
         }
+
         n++
         // Process and render all chunks up to the expected index
         while (currentChunkIndex <= expectedChunkIndex && currentChunkIndex < numChunks) { //If chunk processing is slower then expected and chunk index has not exceded total number of chunks
+
             const chunk = addZeroes(chunks[currentChunkIndex]); //Zero Padding
             m++
             //timeGraph(chunks[currentChunkIndex]);
+
             // Fast Fourier transform of current chunk, cutting results in half then converting to magnitude
 
             result = fft(chunk);
@@ -502,7 +518,6 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
     }
 
     // Start updating the spectrogram
-    let sum
 
     requestAnimationFrame(updateSpectrogram);
 
@@ -576,8 +591,11 @@ function sliceIntoChunks(audioBuffer) {
 
     for (let i = 0; i < numChunks; i++) {
         const start = i * (FRAMESIZE - overlap);
-        const end = start + FRAMESIZE;
-        const chunk = monoChannel.slice(start, end);
+
+        const realStart = parseInt(start, 10);
+        const end = parseInt(realStart + FRAMESIZE, 10);
+        const chunk = monoChannel.slice(realStart, end);
+
         const windowedChunk = applyWindow(chunk);
         //const chunk = audioBuffer.getChannelData(0).slice(offset, offset + bufferLength);
         chunks.push(windowedChunk);
@@ -611,8 +629,9 @@ function applyWindow(chunk) {
 
 function addZeroes(frame) {
     const N = frame.length;
-    if (N == nFFT) return frame;
+    if (N > nFFT) nFFT = N;
 
+    if (N == nFFT) return frame;
     const numZeroes = nFFT - N;
     const leftZeroes = Math.floor(numZeroes / 2);
 
@@ -660,10 +679,45 @@ function createSpectrum(X) {
     }
 
 }
+/*
+function timeGraph(chunk) {
+    const barWidth = 1; // Width of the bar
+    const maxHeight = timeCanvas.height; // Centerline of the canvas
 
+    const tempCanvas = document.getElementById('canvas');
+    const ctxTemp = tempCanvas.getContext('2d');
+    tempCanvas.width = timeCanvas.width;
+    tempCanvas.height = timeCanvas.height;
+    // Create a copy of the current canvas
+    ctxTemp.drawImage(timeCanvas, -barWidth, 0);
+    ctxTime.clearRect(0, 0, timeCanvas.width, timeCanvas.height);
+    ctxTime.drawImage(tempCanvas, -barWidth, 0);
+
+    value = maxHeight * chunk[200]
+    // Draw the new bar based on the value's sign
+    if (value >= 0) {
+        // Positive bar: Draw above the centerline
+        ctxTime.fillRect(
+            timeCanvas.width - (barWidth), // X-position (rightmost edge)
+            timeCanvas.height / 2 - value, // Y-position (centerline minus height)
+            barWidth, // Width of the bar
+            value // Positive height
+        );
+    } else {
+        // Negative bar: Draw below the centerline
+        ctxTime.fillRect(
+            timeCanvas.width - (barWidth), // X-position (rightmost edge)
+            timeCanvas.height / 2, // Y-position (centerline)
+            barWidth, // Width of the bar
+            -value // Negative height (make it positive for fillRect)
+        );
+    }
+}*/
+
+/*
 function timeGraph(chunk) {
 
-
+    const frameRatio = Math.floor(FRAMESIZE / 9)
     const barWidth = 1; // Width of the bar
     const maxHeight = timeCanvas.height; // Centerline of the canvas
     // Create a copy of the current canvas
@@ -674,12 +728,11 @@ function timeGraph(chunk) {
 
     // Redraw the copy, shifted left by 1 pixel
     ctxTime.putImageData(canvasCopy, -3, 0);
-
     // Clear the rightmost column
     ctxTime.clearRect(timeCanvas.width - (3 * barWidth), 0, 3 * barWidth, timeCanvas.height);
     for (let i = 3; i > 0; i--) {
-        let value = maxHeight * chunk[i * 200]; // Supports positive and negative values
 
+        let value = maxHeight * chunk[i * frameRatio]; // Supports positive and negative values
         // Draw the new bar based on the value's sign
         if (value >= 0) {
             // Positive bar: Draw above the centerline
@@ -699,8 +752,28 @@ function timeGraph(chunk) {
             );
         }
     }
-}
+}*/
+function timeGraph(X) {
+    const barWidth = 1;
+    ctxTime.drawImage(timeCanvas, -barWidth, 0)
+    ctxTime.clearRect(timeCanvasRelativeWidth - (barWidth), 0, barWidth, timeCanvas.height);
+    console.log(timeCanvas.width)
+    console.log(timeCanvasRelativeWidth)
+    const nyquist = SAMPLEFREQ / 2; // Nyquist frequency
+    const ratio = SAMPLEFREQ / 16000;
 
+
+    ctxTime.fillStyle = `rgb(${0}, ${0}, ${0})`;
+    ctxTime.fillRect(
+        (timeCanvasRelativeWidth - barWidth),           // x-coordinate
+        timeCanvas.height / 2 - (timeCanvas.height * X[5]),               // y-coordinate
+        barWidth,                        // width
+        2                    // height
+    );
+
+
+
+}
 
 function createMovingSpectrogram(X) {
     const barWidth = 1;
