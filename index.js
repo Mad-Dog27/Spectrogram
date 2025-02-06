@@ -275,27 +275,36 @@ async function getMicData() {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         const mediaStreamSource = audioContext.createMediaStreamSource(stream);
         const deviceSampleRate = audioContext.sampleRate;
-
+        let lowerPower = 1;
+        let higherPower = 1;
         // Create an AnalyserNode for real-time frequency domain analysis
         const analyser = audioContext.createAnalyser();
-        analyser.fftSize = nFFT;
+        analyser.fftSize = FRAMESIZE;
         mediaStreamSource.connect(analyser);
-
+        let prevTimeDomainBuffer = [];
         // Array to store time-domain or frequency-domain data
         const dataArray = new Float32Array(analyser.frequencyBinCount);
         let chunkIndex = 0;
         // Function to process and visualize the microphone input 
         function processMicInput() {
+            if (FRAMESIZE != analyser.fftSize) {
+                while (lowerPower < FRAMESIZE) { lowerPower <<= 1; }
+                higherPower = lowerPower;
+                lowerPower >>= 1;
+                analyser.fftSize = (FRAMESIZE - lowerPower <= higherPower - FRAMESIZE) ? lowerPower : higherPower
+            }
             //New array/Buffer to store the audio samples
             let timeDomainBuffer = new Float32Array(FRAMESIZE);
             //analyser.sampleRate = 16000;
             //console.log(analyser.sampleRate)
-
             /*In the audio file processing, I store the audio data myself, but in this case I am not able to access
             the audio buffer, so am making use of getFloatTimeDomainData which stores the audio data from the analyser
             int my timeDomainBuffer. 
             NOTE: getFloatFrequencyData could also be used to obtain the frequency magnitudes But I prefer to use my maths*/
             analyser.getFloatTimeDomainData(timeDomainBuffer);
+            timeDomainBuffer = addOverLap(timeDomainBuffer, prevTimeDomainBuffer);
+            prevTimeDomainBuffer = timeDomainBuffer;
+
 
             const resampledTimeDomainBuffer = resampleBuffer(
                 timeDomainBuffer,
@@ -316,7 +325,7 @@ async function getMicData() {
             createSpectrum(chosenValues);
             createMovingSpectrogram(chosenValues);
 
-            timeGraph(timeDomainBuffer)
+            //timeGraph(timeDomainBuffer)
             if (recordOn) {
                 if (!storedBuffer[chunkIndex]) {
                     storedBuffer[chunkIndex] = resampledTimeDomainBuffer;
@@ -343,6 +352,20 @@ async function getMicData() {
     } catch (error) {
         console.error("Error accessing microphone:", error); //Might be better then using console.log
     }
+}
+function addOverLap(timeDomainBuffer, prevTimeDomainBuffer) {
+    const prevLength = prevTimeDomainBuffer.length;
+    const currLength = timeDomainBuffer.length;
+    console.log(prevLength)
+
+    if (prevLength == 0) { return timeDomainBuffer }
+    let newCurrentBuffer = new Float32Array(currLength + overlap)
+
+    for (let i = 0; i < overlap; i++) {
+        newCurrentBuffer[i] = prevTimeDomainBuffer[prevLength - i - 1]
+    }
+    newCurrentBuffer.set(timeDomainBuffer, overlap)
+    return newCurrentBuffer;
 }
 
 function combineBuffers(buffers) {
@@ -389,7 +412,10 @@ async function resampleAudio(audioBuffer) {
 }
 
 function resampleBuffer(buffer, deviceRate, targetRate) {
+    if (deviceRate == targetRate) return buffer;
+    console.log("AAAAAAAAAA")
     const resampleRatio = deviceRate / targetRate;
+    console.log(deviceRate)
     const newLength = Math.floor(buffer.length / resampleRatio);
     const resampledBuffer = new Float32Array(newLength);
 
@@ -591,8 +617,8 @@ function sliceIntoChunks(audioBuffer) {
 
     for (let i = 0; i < numChunks; i++) {
         const start = i * (FRAMESIZE - overlap);
-
         const realStart = parseInt(start, 10);
+
         const end = parseInt(realStart + FRAMESIZE, 10);
         const chunk = monoChannel.slice(realStart, end);
 
