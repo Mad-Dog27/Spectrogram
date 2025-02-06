@@ -37,6 +37,8 @@ const playRecordButton = document.getElementById('playRecord')
 //Button Inputs for altering graphs
 const melButtonInput = document.getElementById("melToggle")
 const isMel = document.getElementById('isMel')
+const timeButtonInput = document.getElementById('timeButton')
+const isTime = document.getElementById('isTime')
 const recordButtonInput = document.getElementById('recordToggle')
 const windowSelect = document.getElementById('windowSelect');
 const colourSchemeSelect = document.getElementById('colourSelect');
@@ -87,6 +89,7 @@ let finshedRT = null;
 let micOn = null;
 let mel = null;
 let melOn = false;
+let timeOn = null;
 let melProcessed = false;
 let isDB = null;
 let REFERENCE = 2 ^ 15;
@@ -172,7 +175,15 @@ melButtonInput.addEventListener('click', () => {
     console.log("Mel toggled ", melOn)
 
 })
-
+timeButtonInput.addEventListener('click', () => {
+    if (timeOn) {
+        timeOn = null;
+        isTime.textContent = "OFF"
+    } else {
+        timeOn = true;
+        isTime.textContent = "On"
+    }
+})
 magnitudeSelect.addEventListener('change', (event) => {
     //Changing the window value, between Rectangular, hamming and blackman-harris
     chosenMagnitudeScale = event.target.value;
@@ -245,27 +256,42 @@ playRecordButton.addEventListener('click', () => {
 
 
 function processRecording() {
-    audioBuffer = null;
-    let combinedBuffer = combineBuffers(storedBuffer);
+    for (let chunkIndex = 0; chunkIndex < storedBuffer.length; chunkIndex++) {
+        const chunk = addZeroes(applyWindow(storedBuffer[chunkIndex]));//Applying a window AND zero padding, the function above defaults to rectangular window
+        const result = fft(chunk); //FAST FOURIER TRANSFORM
 
-    audioBuffer = audioContext.createBuffer(
-        1, // Number of channels
-        combinedBuffer.length, // Length of the buffer
-        SAMPLEFREQ // Sample rate
-    );
+        if (chosenMagnitudeScale == "magnitude") {
+            const dataMagnitude = result.map(bin => bin.magnitude);
+            chosenValues = dataMagnitude.slice(0, nFFT / 2)
+        } else {
+            const datadB = result.map(bin => bin.dB);
+            chosenValues = datadB.slice(0, nFFT / 2)
+        }
+        //drawVisual(analyser)
+        createSpectrum(chosenValues);
+        createMovingSpectrogram(chosenValues);
+    }
+    /*
+audioBuffer = null;
+let combinedBuffer = combineBuffers(storedBuffer);
+audioBuffer = audioContext.createBuffer(
+1, // Number of channels
+combinedBuffer.length, // Length of the buffer
+48000 // Sample rate
+);
 
-    // Copy the combined buffer into the AudioBuffer
-    audioBuffer.getChannelData(0).set(combinedBuffer);
+// Copy the combined buffer into the AudioBuffer
+audioBuffer.getChannelData(0).set(combinedBuffer);
 
-    // Create a source and play the buffer
-    const source = audioContext.createBufferSource();
-    source.buffer = audioBuffer;
-    source.connect(audioContext.destination);
-    source.start(0);
-    RecordProcessing = true;
+// Create a source and play the buffer
+const source = audioContext.createBufferSource();
+source.buffer = audioBuffer;
+source.connect(audioContext.destination);
+source.start(0);
+RecordProcessing = true;
 
-    processAudioBuffer(audioBuffer);
-
+processAudioBuffer(audioBuffer);
+*/
 }
 
 async function getMicData() {
@@ -292,6 +318,7 @@ async function getMicData() {
                 higherPower = lowerPower;
                 lowerPower >>= 1;
                 analyser.fftSize = (FRAMESIZE - lowerPower <= higherPower - FRAMESIZE) ? lowerPower : higherPower
+                console.log(analyser.fftSize)
             }
             //New array/Buffer to store the audio samples
             let timeDomainBuffer = new Float32Array(FRAMESIZE);
@@ -306,7 +333,7 @@ async function getMicData() {
             prevTimeDomainBuffer = timeDomainBuffer;
 
 
-            const resampledTimeDomainBuffer = resampleBuffer(
+            const resampledTimeDomainBuffer = resampleMicBuffer(
                 timeDomainBuffer,
                 deviceSampleRate,
                 SAMPLEFREQ
@@ -356,7 +383,6 @@ async function getMicData() {
 function addOverLap(timeDomainBuffer, prevTimeDomainBuffer) {
     const prevLength = prevTimeDomainBuffer.length;
     const currLength = timeDomainBuffer.length;
-    console.log(prevLength)
 
     if (prevLength == 0) { return timeDomainBuffer }
     let newCurrentBuffer = new Float32Array(currLength + overlap)
@@ -411,23 +437,25 @@ async function resampleAudio(audioBuffer) {
     return newBuffer;
 }
 
-function resampleBuffer(buffer, deviceRate, targetRate) {
+function resampleMicBuffer(buffer, deviceRate, targetRate) {
     if (deviceRate == targetRate) return buffer;
-    console.log("AAAAAAAAAA")
+
     const resampleRatio = deviceRate / targetRate;
-    console.log(deviceRate)
     const newLength = Math.floor(buffer.length / resampleRatio);
     const resampledBuffer = new Float32Array(newLength);
 
     for (let i = 0; i < newLength; i++) {
-        const index = i * resampleRatio;
-        const lower = Math.floor(index);
-        const upper = Math.ceil(index);
+        const originalIndex = i * resampleRatio;
+        const lower = Math.floor(originalIndex);
+        const upper = Math.ceil(originalIndex);
 
         if (upper < buffer.length) {
-            const weight = index - lower;
-            resampledBuffer[i] =
-                (1 - weight) * buffer[lower] + weight * buffer[upper];
+            const weight = originalIndex - lower;
+            if (weight == 0) {
+                resampledBuffer[i] = buffer[lower]
+            } else {
+                resampledBuffer[i] = (1 - weight) * buffer[lower] + weight * buffer[upper];
+            }
         } else {
             resampledBuffer[i] = buffer[lower];
         }
@@ -506,30 +534,30 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
         n++
         // Process and render all chunks up to the expected index
         while (currentChunkIndex <= expectedChunkIndex && currentChunkIndex < numChunks) { //If chunk processing is slower then expected and chunk index has not exceded total number of chunks
+            if (timeOn) { timeGraph(chunks[currentChunkIndex]) } else {
+                const chunk = addZeroes(chunks[currentChunkIndex]); //Zero Padding
+                m++
+                //timeGraph(chunks[currentChunkIndex]);
 
-            const chunk = addZeroes(chunks[currentChunkIndex]); //Zero Padding
-            m++
-            //timeGraph(chunks[currentChunkIndex]);
+                // Fast Fourier transform of current chunk, cutting results in half then converting to magnitude
 
-            // Fast Fourier transform of current chunk, cutting results in half then converting to magnitude
+                result = fft(chunk);
+                //result[currentChunkIndex] = result[currentChunkIndex].slice(0, FRAMESIZE / 2);
 
-            result = fft(chunk);
-            //result[currentChunkIndex] = result[currentChunkIndex].slice(0, FRAMESIZE / 2);
-
-            //Updating all Graphs 
-            if (!isDB) {
-                const dataMagnitude = result.map(bin => bin.magnitude);
-                chosenValues = dataMagnitude.slice(0, nFFT / 2)
-            } else {
-                const datadB = result.map(bin => bin.dB);
-                chosenValues = datadB.slice(0, nFFT / 2)
+                //Updating all Graphs 
+                if (!isDB) {
+                    const dataMagnitude = result.map(bin => bin.magnitude);
+                    chosenValues = dataMagnitude.slice(0, nFFT / 2)
+                } else {
+                    const datadB = result.map(bin => bin.dB);
+                    chosenValues = datadB.slice(0, nFFT / 2)
 
 
+                }
+                //drawVisual(analyser)
+                createSpectrum(chosenValues);
+                createMovingSpectrogram(chosenValues);
             }
-            //drawVisual(analyser)
-            createSpectrum(chosenValues);
-            createMovingSpectrogram(chosenValues);
-
             currentChunkIndex++; //incrementing chunk index
         }
 
@@ -682,7 +710,7 @@ function createSpectrum(X) {
 
     ctx2D.clearRect(0, 0, canvas2D.width, canvas2D.height);
     //const windowRatio = nFFT / FRAMESIZE
-    const K = X.length / 2; // Number of frequency bins
+    const K = X.length; // Number of frequency bins
     const barWidth = canvas2D.width / K; // Width of each bar in the spectrum
     let freq = 0;
     // Normalize the magnitude values to fit the canvas height
@@ -699,7 +727,7 @@ function createSpectrum(X) {
         ctx2D.fillStyle = `rgb(${red}, ${green}, ${blue})`;
 
         // Draw the bar
-        ctx2D.fillRect(freq, canvas2D.height - value, barWidth, value);
+        ctx2D.fillRect(2 * freq, canvas2D.height - value, 2 * barWidth, value);
         //ctx2D.fillRect(canvas2.width - barWidth, 0, barWidth, canvas2.height)
         freq += barWidth;
     }
@@ -740,10 +768,10 @@ function timeGraph(chunk) {
     }
 }*/
 
-/*
-function timeGraph(chunk) {
 
-    const frameRatio = Math.floor(FRAMESIZE / 9)
+function timeGraph(chunk) {
+    const num = 3;
+    const frameRatio = Math.floor(FRAMESIZE / num)
     const barWidth = 1; // Width of the bar
     const maxHeight = timeCanvas.height; // Centerline of the canvas
     // Create a copy of the current canvas
@@ -753,10 +781,10 @@ function timeGraph(chunk) {
     ctxTime.clearRect(0, 0, timeCanvas.width, timeCanvas.height);
 
     // Redraw the copy, shifted left by 1 pixel
-    ctxTime.putImageData(canvasCopy, -3, 0);
+    ctxTime.putImageData(canvasCopy, -num, 0);
     // Clear the rightmost column
-    ctxTime.clearRect(timeCanvas.width - (3 * barWidth), 0, 3 * barWidth, timeCanvas.height);
-    for (let i = 3; i > 0; i--) {
+    ctxTime.clearRect(timeCanvas.width - (num * barWidth), 0, num * barWidth, timeCanvas.height);
+    for (let i = num; i > 0; i--) {
 
         let value = maxHeight * chunk[i * frameRatio]; // Supports positive and negative values
         // Draw the new bar based on the value's sign
@@ -778,7 +806,8 @@ function timeGraph(chunk) {
             );
         }
     }
-}*/
+}
+/*
 function timeGraph(X) {
     const barWidth = 1;
     ctxTime.drawImage(timeCanvas, -barWidth, 0)
@@ -799,7 +828,7 @@ function timeGraph(X) {
 
 
 
-}
+}*/
 
 function createMovingSpectrogram(X) {
     const barWidth = 1;
