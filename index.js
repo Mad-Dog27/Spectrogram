@@ -68,10 +68,10 @@ const timeCanvas = document.getElementById('timeCanvas')
 const ctxTime = timeCanvas.getContext("2d")
 let timeDiffs = []
 
-
+ctxSpectrum.imageSmoothingEnabled = true;
 //Global Constants
 let FRAMESIZE = 128; //time domain amount of samples taken
-let nFFT = 1024; //frequency domain amount zeroes and values aquired through fft
+let nFFT = 512 * 2; //frequency domain amount zeroes and values aquired through fft
 let overlapPercent = 0.25;
 let overlap = Math.round(FRAMESIZE * overlapPercent);
 const SPEED = 1;
@@ -96,19 +96,23 @@ let REFERENCE = 2 ^ 15;
 let WIDTH = 0.7;    //0.7
 let HEIGHT = 0.7;  //0.49  DOESNT EFFECT - No point
 let RecordProcessing = false;
+
+let Size = 5;
+let Sigma = 100.0;
+let kernal = createGaussianKernel(Size, Sigma)
 chosenWindow = "blackman Harris"// rectangular, hamming, blackman Harris
 chosenColourScheme = 'greyScale'
 chosenMagnitudeScale = "magnitude"
 
 canvasSpectrum.width = window.innerWidth * WIDTH - 2;  // 70% of screen width minus borders
-canvasSpectrum.height = window.innerHeight * HEIGHT - 2;
+canvasSpectrum.height = window.innerHeight * (HEIGHT * 1) - 2;
 canvasAxis.width = canvasSpectrum.width + 40;
 canvasAxis.height = canvasSpectrum.height;
 
 timeCanvas.width = window.innerWidth * (WIDTH * 3) - 2;  // 70% of screen width minus borders
 timeCanvas.height = window.innerHeight * 0.45 - 2;  // 45% of screen height minus borders
 
-const timeCanvasRelativeWidth = (timeCanvas.width + 2) - 2
+let timeCanvasRelativeWidth = (timeCanvas.width + 2) - 2
 drawAxisLabel();
 
 
@@ -176,6 +180,8 @@ melButtonInput.addEventListener('click', () => {
 
 })
 timeButtonInput.addEventListener('click', () => {
+
+
     if (timeOn) {
         timeOn = null;
         isTime.textContent = "OFF"
@@ -534,30 +540,38 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
         n++
         // Process and render all chunks up to the expected index
         while (currentChunkIndex <= expectedChunkIndex && currentChunkIndex < numChunks) { //If chunk processing is slower then expected and chunk index has not exceded total number of chunks
-            if (timeOn) { timeGraph(chunks[currentChunkIndex]) } else {
-                const chunk = addZeroes(chunks[currentChunkIndex]); //Zero Padding
-                m++
-                //timeGraph(chunks[currentChunkIndex]);
 
-                // Fast Fourier transform of current chunk, cutting results in half then converting to magnitude
+            const chunk = addZeroes(chunks[currentChunkIndex]); //Zero Padding
+            m++
+            //timeGraph(chunks[currentChunkIndex]);
 
-                result = fft(chunk);
-                //result[currentChunkIndex] = result[currentChunkIndex].slice(0, FRAMESIZE / 2);
+            // Fast Fourier transform of current chunk, cutting results in half then converting to magnitude
 
-                //Updating all Graphs 
-                if (!isDB) {
-                    const dataMagnitude = result.map(bin => bin.magnitude);
-                    chosenValues = dataMagnitude.slice(0, nFFT / 2)
-                } else {
-                    const datadB = result.map(bin => bin.dB);
-                    chosenValues = datadB.slice(0, nFFT / 2)
+            result = fft(chunk);
+            //result[currentChunkIndex] = result[currentChunkIndex].slice(0, FRAMESIZE / 2);
+
+            //Updating all Graphs 
+            if (!isDB) {
+                const dataMagnitude = result.map(bin => bin.magnitude);
+                chosenValues = dataMagnitude.slice(0, nFFT / 2)
+            } else {
+                const datadB = result.map(bin => bin.dB);
+                chosenValues = datadB.slice(0, nFFT / 2)
 
 
-                }
+            }
+            if (timeOn) {
+                const smoothChosenValues = applyGaussianFilter(chosenValues, kernal)
                 //drawVisual(analyser)
+
+                createSpectrum(chosenValues);
+                createMovingSpectrogram(smoothChosenValues);
+
+            } else {
                 createSpectrum(chosenValues);
                 createMovingSpectrogram(chosenValues);
             }
+
             currentChunkIndex++; //incrementing chunk index
         }
 
@@ -576,7 +590,45 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
     requestAnimationFrame(updateSpectrogram);
 
 }
+function createGaussianKernel(size, sigma) {
+    const newKernel = new Float32Array(size);
+    const mean = Math.floor(size / 2);
+    let sum = 0; // For normalization
 
+    for (let x = 0; x < size; x++) {
+        const exponent = -((x - mean) ** 2) / (2 * sigma ** 2);
+        newKernel[x] = Math.exp(exponent);
+        sum += newKernel[x];
+    }
+
+    // Normalize the kernel so the sum equals 1
+    for (let x = 0; x < size; x++) {
+        newKernel[x] /= sum;
+    }
+
+    return newKernel;
+}
+function applyGaussianFilter(chosenValues, kernal) {
+    const smoothedValues = new Float32Array(chosenValues.length);
+    const half = Math.floor(kernal.length / 2);
+
+    for (let i = 0; i < chosenValues.length; i++) {
+        let sum = 0;
+
+        for (let j = -half; j <= half; j++) {
+            const index = i + j;
+
+            // Ensure the index is within bounds
+            if (index >= 0 && index < chosenValues.length) {
+                sum += chosenValues[index] * kernal[half + j];
+            }
+        }
+
+        smoothedValues[i] = sum;
+    }
+
+    return smoothedValues;
+}
 function fft(input) {
     const N = input.length; //Assume N is of size of power 2, ie (2^n = N)
     if (N <= 1) return [{ real: input[0], imag: 0, magnitude: 0, dB: -Infinity }];
@@ -636,7 +688,7 @@ function sliceIntoChunks(audioBuffer) {
     if (audioBuffer.numberOfChannels >= 2) {
         const samples1 = audioBuffer.getChannelData(1);
         for (let j = 0; j < audioBuffer.length; j++) {
-            monoChannel[j] = (monoChannel[j] + samples1[j]) / 2
+            monoChannel[j] = (monoChannel[j])// + samples1[j]) / 2
         }
     }
     const numChunks = Math.floor((audioBuffer.length - FRAMESIZE) / (FRAMESIZE - overlap)) + 1;
@@ -831,12 +883,14 @@ function timeGraph(X) {
 }*/
 
 function createMovingSpectrogram(X) {
-    const barWidth = 1;
+    const ratio = SAMPLEFREQ / 16000;
+
+    zoom = 1;
+    const barWidth = 1// * zoom;
     const binHeight = canvasSpectrum.height / (nFFT / 2);
     ctxSpectrum.drawImage(canvasSpectrum, -barWidth, 0)
     ctxSpectrum.clearRect(canvasSpectrum.width - (barWidth), 0, barWidth, canvasSpectrum.height);
     //const windowRatio = nFFT / FRAMESIZE
-
     // Normalize the magnitude values to fit the canvas height
     const maxValue = Math.max(...X);
     const minValue = Math.min(...X);
@@ -846,15 +900,14 @@ function createMovingSpectrogram(X) {
     // Convert bin index to frequency
     const nyquist = SAMPLEFREQ / 2; // Nyquist frequency
     if (!melOn) {
-        const ratio = SAMPLEFREQ / 16000;
         X.forEach((intensity, index) => {
 
             //(index / nFFT) * SAMPLEFREQ / 2
             const newIntensity = (intensity / SENS) - (CONTRAST);
             const frequency = (index / (nFFT / 2)) * nyquist;
 
-            if (frequency <= 8000) {
-                const yPosition = canvasSpectrum.height - (frequency / nyquist) * canvasSpectrum.height * ratio;
+            if (frequency <= 8000 / zoom) {
+                const yPosition = canvasSpectrum.height - (frequency / nyquist) * canvasSpectrum.height * ratio * zoom;
 
                 //const freqAxis = (index / K) * samplingFreq;
                 //intensity = (intensity - 0.1) * 10
@@ -863,7 +916,7 @@ function createMovingSpectrogram(X) {
                     (canvasSpectrum.width - barWidth),           // x-coordinate
                     yPosition,               // y-coordinate
                     barWidth,                        // width
-                    binHeight * ratio                    // height
+                    binHeight * ratio * zoom                   // height
                 );
             }
         });
