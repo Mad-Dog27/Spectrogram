@@ -98,15 +98,19 @@ let HEIGHT = 0.7;  //0.49  DOESNT EFFECT - No point
 let RecordProcessing = false;
 
 let Size = 5;
-let Sigma = 100.0;
+let Sigma = 10.0;
 let kernal = createGaussianKernel(Size, Sigma)
+
+let shiftAccumulator = 0; // Global or function-scoped variable
+
+let originalAudioBuffer;
 chosenWindow = "blackman Harris"// rectangular, hamming, blackman Harris
 chosenColourScheme = 'greyScale'
 chosenMagnitudeScale = "magnitude"
 
-canvasSpectrum.width = window.innerWidth * WIDTH - 2;  // 70% of screen width minus borders
+canvasSpectrum.width = window.innerWidth * (WIDTH * 3) - 2;  // 70% of screen width minus borders
 canvasSpectrum.height = window.innerHeight * (HEIGHT * 1) - 2;
-canvasAxis.width = canvasSpectrum.width + 40;
+canvasAxis.width = (canvasSpectrum.width + 2) / 3 - 2;
 canvasAxis.height = canvasSpectrum.height;
 
 timeCanvas.width = window.innerWidth * (WIDTH * 3) - 2;  // 70% of screen width minus borders
@@ -234,7 +238,8 @@ sampleFreqSlider.addEventListener('input', () => {//Function to update the INput
 overlapPercSlider.addEventListener('input', () => {//Function to update the INputed Sampling freq, this will improved freqeuency resolution but only untill you reach the original inputed frequency
     overlapPercent = overlapPercSlider.value; //
     overlapPercSliderValue.textContent = overlapPercent; // Update the display
-    overlap = FRAMESIZE * overlapPercent;
+    overlap = Math.round(FRAMESIZE * overlapPercent);
+    console.log(overlap)
 
 });
 
@@ -299,7 +304,70 @@ RecordProcessing = true;
 processAudioBuffer(audioBuffer);
 */
 }
+/*async function getMicData() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const mediaStreamSource = audioContext.createMediaStreamSource(stream);
+        const deviceSampleRate = audioContext.sampleRate; // Mic sample rate
+        console.log("Device Sample Rate:", deviceSampleRate);
 
+        // Set up AnalyserNode for real-time audio processing
+        const analyser = audioContext.createAnalyser();
+        analyser.fftSize = FRAMESIZE;
+        mediaStreamSource.connect(analyser);
+
+        let prevTimeDomainBuffer = [];
+        let chunkIndex = 0;
+        const dataArray = new Float32Array(analyser.frequencyBinCount);
+
+        async function processMicInput() {
+            let timeDomainBuffer = new Float32Array(FRAMESIZE);
+            analyser.getFloatTimeDomainData(timeDomainBuffer);
+            timeDomainBuffer = addOverLap(timeDomainBuffer, prevTimeDomainBuffer);
+            prevTimeDomainBuffer = timeDomainBuffer;
+
+            // **Resampling Step** (Uses linear interpolation)
+            const resampledTimeDomainBuffer = resampleMicBuffer(timeDomainBuffer, deviceSampleRate, SAMPLEFREQ);
+
+            // Apply windowing and FFT
+            const chunk = addZeroes(applyWindow(resampledTimeDomainBuffer));
+            const result = fft(chunk);
+
+            // Convert to chosen scale
+            const chosenValues = chosenMagnitudeScale === "magnitude"
+                ? result.map(bin => bin.magnitude).slice(0, nFFT / 2)
+                : result.map(bin => bin.dB).slice(0, nFFT / 2);
+
+            createSpectrum(chosenValues);
+            createMovingSpectrogram(chosenValues);
+
+            if (recordOn) {
+                if (!storedBuffer[chunkIndex]) {
+                    storedBuffer[chunkIndex] = resampledTimeDomainBuffer;
+                } else {
+                    console.warn("Chunk index already filled, potential overwrite detected.");
+                }
+                chunkIndex++;
+            }
+
+            if (micOn) {
+                requestAnimationFrame(processMicInput);
+            } else {
+                mediaStreamSource.disconnect();
+                analyser.disconnect();
+                stream.getTracks().forEach(track => track.stop());
+                console.log('Stream processing stopped.');
+            }
+        }
+
+        processMicInput();
+
+    } catch (error) {
+        console.error("Error accessing microphone:", error);
+    }
+}
+ */
 async function getMicData() {
     try {
         if (mel == null) { }//mel = melScale(); }
@@ -427,7 +495,8 @@ async function resampleAudio(audioBuffer) {
     if (originalSampleFreq == SAMPLEFREQ) {
         return audioBuffer;
     }
-    console.log("NOTRETURN")
+
+
     const offlineContext = new OfflineAudioContext(
         audioBuffer.numberOfChannels,
         Math.ceil(audioBuffer.length * (SAMPLEFREQ / originalSampleFreq)),
@@ -441,34 +510,30 @@ async function resampleAudio(audioBuffer) {
 
     const newBuffer = await offlineContext.startRendering();
     return newBuffer;
+
 }
 
-function resampleMicBuffer(buffer, deviceRate, targetRate) {
-    if (deviceRate == targetRate) return buffer;
-
-    const resampleRatio = deviceRate / targetRate;
-    const newLength = Math.floor(buffer.length / resampleRatio);
-    const resampledBuffer = new Float32Array(newLength);
+function resampleMicBuffer(buffer, originalRate, targetRate) {
+    const ratio = originalRate / targetRate;
+    const newLength = Math.floor(buffer.length / ratio);
+    let newBuffer = new Float32Array(newLength);
 
     for (let i = 0; i < newLength; i++) {
-        const originalIndex = i * resampleRatio;
-        const lower = Math.floor(originalIndex);
-        const upper = Math.ceil(originalIndex);
+        let index = i * ratio;
+        let lowerIndex = Math.floor(index);
+        let upperIndex = Math.ceil(index);
+        let fraction = index - lowerIndex;
 
-        if (upper < buffer.length) {
-            const weight = originalIndex - lower;
-            if (weight == 0) {
-                resampledBuffer[i] = buffer[lower]
-            } else {
-                resampledBuffer[i] = (1 - weight) * buffer[lower] + weight * buffer[upper];
-            }
+        if (upperIndex < buffer.length) {
+            newBuffer[i] = buffer[lowerIndex] * (1 - fraction) + buffer[upperIndex] * fraction; // Linear interpolation
         } else {
-            resampledBuffer[i] = buffer[lower];
+            newBuffer[i] = buffer[lowerIndex]; // Edge case handling
         }
     }
 
-    return resampledBuffer;
+    return newBuffer;
 }
+
 
 
 async function processAudioBuffer(audioBuffer) {
@@ -478,6 +543,7 @@ async function processAudioBuffer(audioBuffer) {
     console.log('Number of Channels:', audioBuffer.numberOfChannels);
     console.log('Duration (s):', audioBuffer.duration);
     console.log(audioBuffer.length);
+    originalAudioBuffer = audioBuffer;
     audioBuffer = await resampleAudio(audioBuffer);
     //Exectuting the FFT for file input
     const source = audioContext.createBufferSource();
@@ -505,8 +571,9 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
     /*For the next step, the audioBuffer needs to be cut into respective chunks for audioProccessing, 
     first the chunk characteristics need to be determined*/
     const sampleRate = audioBuffer.sampleRate;
+    console.log(sampleRate)
     const effectiveChunkSize = FRAMESIZE - overlap; //Subracting overlap, as that portion of chunk is accounted for in the next
-    const chunkDuration = effectiveChunkSize / sampleRate; // Duration of one chunk in seconds
+    const chunkDuration = effectiveChunkSize / SAMPLEFREQ; // Duration of one chunk in seconds
     // Slice the audio into chunks
     const chunks = sliceIntoChunks(audioBuffer); // NOTE: sliceIntoChunks function also applies window
     const numChunks = chunks.length;
@@ -565,11 +632,11 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
                 //drawVisual(analyser)
 
                 createSpectrum(chosenValues);
-                createMovingSpectrogram(smoothChosenValues);
+                createMovingSpectrogram(smoothChosenValues, effectiveChunkSize);
 
             } else {
                 createSpectrum(chosenValues);
-                createMovingSpectrogram(chosenValues);
+                createMovingSpectrogram(chosenValues, effectiveChunkSize);
             }
 
             currentChunkIndex++; //incrementing chunk index
@@ -581,6 +648,8 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
         } else {
             filePlaying = null;
         }
+        console.log(elapsedTime - prevTime)
+
         prevTime = elapsedTime;
 
     }
@@ -688,7 +757,7 @@ function sliceIntoChunks(audioBuffer) {
     if (audioBuffer.numberOfChannels >= 2) {
         const samples1 = audioBuffer.getChannelData(1);
         for (let j = 0; j < audioBuffer.length; j++) {
-            monoChannel[j] = (monoChannel[j])// + samples1[j]) / 2
+            monoChannel[j] = (monoChannel[j] + samples1[j]) / 2
         }
     }
     const numChunks = Math.floor((audioBuffer.length - FRAMESIZE) / (FRAMESIZE - overlap)) + 1;
@@ -882,13 +951,19 @@ function timeGraph(X) {
 
 }*/
 
-function createMovingSpectrogram(X) {
+function createMovingSpectrogram(X, effectiveChunkSize) {
     const ratio = SAMPLEFREQ / 16000;
 
     zoom = 1;
-    const barWidth = 1// * zoom;
+    const barWidth = 1;
+    const shiftAmount = barWidth * (effectiveChunkSize / FRAMESIZE);
+    shiftAccumulator += shiftAmount; // Accumulate fractional shifts
+    if (shiftAccumulator >= barWidth) {
+        ctxSpectrum.drawImage(canvasSpectrum, -barWidth, 0);
+        shiftAccumulator -= barWidth; // Reduce accumulator by barWidth
+    }
     const binHeight = canvasSpectrum.height / (nFFT / 2);
-    ctxSpectrum.drawImage(canvasSpectrum, -barWidth, 0)
+    //txSpectrum.drawImage(canvasSpectrum, -shiftAmount, 0)
     ctxSpectrum.clearRect(canvasSpectrum.width - (barWidth), 0, barWidth, canvasSpectrum.height);
     //const windowRatio = nFFT / FRAMESIZE
     // Normalize the magnitude values to fit the canvas height
@@ -1157,9 +1232,8 @@ function drawAxisLabel() {
     const labelWidth = 10;
     if (!melOn) {
         ctxAxis.clearRect(canvasAxis.width - 51, 0, 51, canvasAxis.height)
-
         const labelHeight = canvasAxis.height / numLabels;
-
+        console.log(canvasAxis.width)
         for (let n = 0; n <= numLabels; n++) {
             const label = `${((16000 / 2) / numLabels) * n} Hz`; // Example frequency labels
             ctxAxis.fillText(label, canvasAxis.width - 51, canvasAxis.height - n * labelHeight + 4); // Adjust position as needed
