@@ -10,7 +10,7 @@
     /* Enables side-by-side layout */
     align-items: flex-start;
     /* Aligns items at the top */
-    gap: 20px;
+    gap: 15px;
     /* Adds spacing between main box and controls */
     width: 100%;
     margin-top: 1px;
@@ -46,14 +46,14 @@
 #canvasSpectrum {
     margin: 5px;
     border: 1px solid black;
-    width: 80vw;
+    width: 84vw;
     height: 70vh;
 }
 
 #timeCanvas {
     margin: 5px;
     border: 1px solid black;
-    width: 80vw;
+    width: 84vw;
     height: 20vh;
 }
 
@@ -63,13 +63,13 @@
     position: absolute;
     top: 0;
     left: 0;
-    width: 80vw;
+    width: 84vw;
     height: 70vh;
 
 }
 
 #canvas2D {
-    width: 15.5vw;
+    width: 250px;
     height: 300px;
     margin: 0px;
     border: 1px solid black;

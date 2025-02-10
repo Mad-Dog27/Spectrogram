@@ -27,14 +27,14 @@ NOTE: may crash your browser :) - Blame timeGraph() function
 */
 
 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-const optionWidth = "300px"
+const optionWidth = "250px"
 //Button INputs for inputing Data
 const audioFileInput = document.getElementById('audioFileInput');
 const processAgainInput = document.getElementById('processAgain');
-processAgainInput.style.width = "145px"
+processAgainInput.style.width = "120px"
 
 const micButtonInput = document.getElementById('Mic');
-micButtonInput.style.width = "145px"
+micButtonInput.style.width = "120px"
 const recordValue = document.getElementById('recordValue');
 const playRecordButton = document.getElementById('playRecord');
 //Button Inputs for altering graphs
@@ -61,11 +61,11 @@ frameSizeSlider.style.width = optionWidth;
 const frameSizeSliderValue = document.getElementById('frameSizeSliderValue');
 
 const refSlider = document.getElementById("referenceSlider")
-refSlider.style.width = "142.5px";
+refSlider.style.width = "105px";
 const refSliderValue = document.getElementById('referenceSliderValue')
 
 const powerSlider = document.getElementById("powerSlider")
-powerSlider.style.width = "142.5px";
+powerSlider.style.width = "105px";
 const powerSliderValue = document.getElementById('powerSliderValue')
 
 
