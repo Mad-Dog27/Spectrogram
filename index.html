@@ -25,40 +25,50 @@
         </div>
 
         <div id="controls">
+            <brk></brk>
             <input type="file" id="audioFileInput" accept=".wav" />
-            <button id="processAgain">Process Again</button>
-            <button id="Mic">Toggle Microphone</button>
+            <div class="fileInput-container">
+                <button id="processAgain">Process Again</button>
+                <button id="Mic">Toggle Microphone</button>
+            </div>
 
-            <label for="frameSizeSlider">Frame Size: </label>
-            <input type="range" id="frameSizeSlider" min="50" max="1024" value="128" step="2">
+            <label for="frameSizeSlider"></label>
             <p>Frame Size: <span id="frameSizeSliderValue">128</span> Samples</p>
+            <input type="range" id="frameSizeSlider" min="50" max="1024" value="128" step="2">
 
-            <label for="widthSlider">Width Scale: </label>
-            <input type="range" id="widthSlider" min="0.01" max="2" value="0.7" step="0.01">
+
             <p>Width: <span id="widthSliderValue">0.7</span></p>
+            <input type="range" id="widthSlider" min="0.01" max="2" value="0.7" step="0.01">
 
-            <label for="sampleFreqSlider">Sampling Frequency: </label>
-            <input type="range" id="sampleFreqSlider" min="8000" max="48000" value="16000" step="8000">
             <p>Sampling Frequency: <span id="sampleFreqSliderValue">16000</span> Hz</p>
+            <input type="range" id="sampleFreqSlider" min="8000" max="48000" value="16000" step="8000">
 
-            <label for="overlapPercSlider">Overlap: </label>
-            <input type="range" id="overlapPercSlider" min="0" max="0.75" value="0.25" step=".01">
             <p>Overlap: <span id="overlapPercSliderValue">0.25</span> %</p>
+            <input type="range" id="overlapPercSlider" min="0" max="0.75" value="0.25" step=".01">
+            <div class="db-contianer">
+                <div>
+                    <label for="referenceSlider"></label>
+                    <p>Reference: <span id="referenceSliderValue">1</span> </p>
+                    <input type="range" id="referenceSlider" min="-10" max="100" value="1" step=".01">
+                </div>
+                <div>
+                    <label for="powerSlider"></label>
+                    <p>Power: <span id="powerSliderValue">1</span> </p>
+                    <input type="range" id="powerSlider" min="1" max="5" value="1" step="1">
+                </div>
 
-            <label for="magnitudeSelect">Choose the magnitude scale:</label>
+            </div>
             <select id="magnitudeSelect">
                 <option value="magnitude">Magnitude</option>
                 <option value="deciBels">deciBels</option>
             </select>
 
-            <label for="windowSelect">Choose a window function:</label>
             <select id="windowSelect">
                 <option value="blackman Harris">Blackman-Harris</option>
                 <option value="rectangular">Rectangular</option>
                 <option value="hamming">Hamming</option>
             </select>
 
-            <label for="colourSelect">Choose a colour scheme:</label>
             <select id="colourSelect">
                 <option value="greyScale">Grey Scale</option>
                 <option value="heatedMetal">Heated Metal</option>

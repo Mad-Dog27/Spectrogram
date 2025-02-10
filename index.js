@@ -27,33 +27,58 @@ NOTE: may crash your browser :) - Blame timeGraph() function
 */
 
 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-
+const optionWidth = "300px"
 //Button INputs for inputing Data
 const audioFileInput = document.getElementById('audioFileInput');
 const processAgainInput = document.getElementById('processAgain');
+processAgainInput.style.width = "145px"
+
 const micButtonInput = document.getElementById('Mic');
-const recordValue = document.getElementById('recordValue')
-const playRecordButton = document.getElementById('playRecord')
+micButtonInput.style.width = "145px"
+const recordValue = document.getElementById('recordValue');
+const playRecordButton = document.getElementById('playRecord');
 //Button Inputs for altering graphs
-const melButtonInput = document.getElementById("melToggle")
-const isMel = document.getElementById('isMel')
-const timeButtonInput = document.getElementById('timeButton')
-const isTime = document.getElementById('isTime')
-const recordButtonInput = document.getElementById('recordToggle')
+const melButtonInput = document.getElementById("melToggle");
+const isMel = document.getElementById('isMel');
+const timeButtonInput = document.getElementById('timeButton');
+const isTime = document.getElementById('isTime');
+const recordButtonInput = document.getElementById('recordToggle');
 const windowSelect = document.getElementById('windowSelect');
 const colourSchemeSelect = document.getElementById('colourSelect');
-const magnitudeSelect = document.getElementById('magnitudeSelect')
+const magnitudeSelect = document.getElementById('magnitudeSelect');
+magnitudeSelect.style.width = optionWidth;
+colourSchemeSelect.style.width = optionWidth;
+windowSelect.style.width = optionWidth;
+recordButtonInput.style.width = optionWidth;
+timeButtonInput.style.width = optionWidth;
+melButtonInput.style.width = optionWidth;
+playRecordButton.style.width = optionWidth;
+
+
 
 const frameSizeSlider = document.getElementById('frameSizeSlider');
+frameSizeSlider.style.width = optionWidth;
 const frameSizeSliderValue = document.getElementById('frameSizeSliderValue');
 
+const refSlider = document.getElementById("referenceSlider")
+refSlider.style.width = "142.5px";
+const refSliderValue = document.getElementById('referenceSliderValue')
+
+const powerSlider = document.getElementById("powerSlider")
+powerSlider.style.width = "142.5px";
+const powerSliderValue = document.getElementById('powerSliderValue')
+
+
 const widthSlider = document.getElementById('widthSlider');
+widthSlider.style.width = optionWidth;
 const widthSliderValue = document.getElementById('widthSliderValue');
 
 const sampleFreqSlider = document.getElementById('sampleFreqSlider');
+sampleFreqSlider.style.width = optionWidth;
 const sampleFreqSliderValue = document.getElementById('sampleFreqSliderValue');
 
 const overlapPercSlider = document.getElementById('overlapPercSlider');
+overlapPercSlider.style.width = optionWidth;
 const overlapPercSliderValue = document.getElementById('overlapPercSliderValue');
 //IDs for all three canvas's: Canvas2D, CanvasSpectrum, timeCanvas
 const canvas2D = document.getElementById("canvas2D");
@@ -102,6 +127,9 @@ let Sigma = 10.0;
 let kernal = createGaussianKernel(Size, Sigma)
 
 let shiftAccumulator = 0; // Global or function-scoped variable
+
+let REF = 1;
+let POW = 1;
 
 let originalAudioBuffer;
 chosenWindow = "blackman Harris"// rectangular, hamming, blackman Harris
@@ -199,6 +227,9 @@ magnitudeSelect.addEventListener('change', (event) => {
     chosenMagnitudeScale = event.target.value;
     console.log(`Window function selected: ${chosenMagnitudeScale}`);
     if (chosenMagnitudeScale == "deciBels") { isDB = true; }
+    else {
+        isDB = false;
+    }
 });
 windowSelect.addEventListener('change', (event) => {
     //Changing the window value, between Rectangular, hamming and blackman-harris
@@ -216,8 +247,19 @@ frameSizeSlider.addEventListener('input', () => {
     //nFFT = FRAMESIZE * 2; //frequency domain amount zeroes and values aquired through fft
 
     overlap = Math.round(FRAMESIZE * overlapPercent);
-
 })
+
+refSlider.addEventListener('input', () => {
+    REF = refSlider.value;
+    refSliderValue.textContent = REF;
+})
+
+powerSlider.addEventListener('input', () => {
+    POW = powerSlider.value;
+    powerSliderValue.textContent = POW;
+})
+
+
 widthSlider.addEventListener('input', () => {
     //Sensitivity slider display and use, on new input
     WIDTH = widthSlider.value; //Storing new value in SENS
@@ -756,10 +798,10 @@ function fft(input) {
         }
         if (micOn) { alt = 1 }
         combined[k].magnitude = Math.sqrt(combined[k].real ** 2 + combined[k].imag ** 2) / alt;
-        if (isDB) { combined[k].dB = 20 * Math.log10(combined[k].magnitude); }
+        if (isDB) { combined[k].dB = 20 * Math.log10(combined[k].magnitude / REF); }
 
         combined[k + N / 2].magnitude = Math.sqrt(combined[k + N / 2].real ** 2 + combined[k + N / 2].imag ** 2) / alt;
-        if (isDB) { combined[k + N / 2].dB = 20 * Math.log10(combined[k + N / 2].magnitude / 1); }
+        if (isDB) { combined[k + N / 2].dB = 20 * Math.log10(combined[k + N / 2].magnitude / REF); }
         //magnitude[k] = Math.sqrt(combined[k].real ** 2 + combined[k].imag ** 2);
     }
     //console.log(Math.max(...combined.map(c => c.magnitude)));
@@ -1147,7 +1189,7 @@ function intensityToColor(intensity, maxValue, minValue) {
         const minIntensity = -150;
         const maxIntensity = 0;
         let normalized = Math.max(0, Math.min(1, (intensity - minIntensity) / (maxIntensity - minIntensity)));
-        let normalizedPowered = Math.pow((normalized), 5)
+        let normalizedPowered = Math.pow((normalized), POW)
         let value = Math.round((1 - normalizedPowered) * 255);
         // Map normalized value to grayscale
         // console.log(normalized)

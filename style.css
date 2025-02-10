@@ -46,14 +46,14 @@
 #canvasSpectrum {
     margin: 5px;
     border: 1px solid black;
-    width: 70vw;
+    width: 80vw;
     height: 70vh;
 }
 
 #timeCanvas {
     margin: 5px;
     border: 1px solid black;
-    width: 70vw;
+    width: 80vw;
     height: 20vh;
 }
 
@@ -63,15 +63,25 @@
     position: absolute;
     top: 0;
     left: 0;
-    width: 70vw;
+    width: 80vw;
     height: 70vh;
 
 }
 
 #canvas2D {
-    width: 25vw;
+    width: 15.5vw;
     height: 300px;
-    margin: 10px;
+    margin: 0px;
     border: 1px solid black;
     /* Optional: adds border to the canvas for visibility */
+}
+
+.db-contianer {
+    display: flex;
+    gap: 15px;
+}
+
+.fileInput-container {
+    display: flex;
+    gap: 10px;
 }
