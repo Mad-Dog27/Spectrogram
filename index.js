@@ -71,7 +71,7 @@ let timeDiffs = []
 ctxSpectrum.imageSmoothingEnabled = true;
 //Global Constants
 let FRAMESIZE = 128; //time domain amount of samples taken
-let nFFT = FRAMESIZE * 2; //frequency domain amount zeroes and values aquired through fft
+let nFFT = 512 * 2; //frequency domain amount zeroes and values aquired through fft
 let overlapPercent = 0.25;
 let overlap = Math.round(FRAMESIZE * overlapPercent);
 const SPEED = 1;
@@ -213,7 +213,7 @@ colourSchemeSelect.addEventListener('change', (event) => {
 frameSizeSlider.addEventListener('input', () => {
     FRAMESIZE = parseInt(frameSizeSlider.value, 10);
     frameSizeSliderValue.textContent = FRAMESIZE;
-    nFFT = FRAMESIZE * 2; //frequency domain amount zeroes and values aquired through fft
+    //nFFT = FRAMESIZE * 2; //frequency domain amount zeroes and values aquired through fft
 
     overlap = Math.round(FRAMESIZE * overlapPercent);
 
@@ -392,7 +392,6 @@ async function getMicData() {
         const startTime = analyser.elapsedTime;
         // Function to process and visualize the microphone input 
         function processMicInput() {
-            console.log(FRAMESIZE)
 
             if (FRAMESIZE != analyser.fftSize) {
                 console.log(FRAMESIZE)
@@ -401,9 +400,10 @@ async function getMicData() {
                 lowerPower >>= 1;
                 closestFrameSize = (FRAMESIZE - lowerPower <= higherPower - FRAMESIZE) ? lowerPower : higherPower;
                 analyser.fftSize = closestFrameSize;
-                nFFT = closestFrameSize * 2; //frequency domain amount zeroes and values aquired through fft
-
-                console.log("closest", closestFrameSize)
+                if (closestFrameSize >= nFFT) {
+                    nFFT = closestFrameSize * 2; //frequency domain amount zeroes and values aquired through fft
+                }
+                //console.log("closest FRAMESIZE: ", closestFrameSize)
             }
             //New array/Buffer to store the audio samples
             let timeDomainBuffer = new Float32Array(closestFrameSize);
@@ -423,13 +423,11 @@ async function getMicData() {
             )
             let newTimeDomainBuffer = new Float32Array(closestFrameSize * SAMPLEFREQ / deviceSampleRate)
             newTimeDomainBuffer = addOverLap(resampledTimeDomainBuffer, prevTimeDomainBuffer);
-
             prevTimeDomainBuffer = resampledTimeDomainBuffer;
 
 
 
-            const chunk = addZeroes(applyWindow(newTimeDomainBuffer));//Applying a window AND zero padding, the function above defaults to rectangular window
-            console.log(chunk.length)
+            const chunk = addZeroes(applyWindow(newTimeDomainBuffer, closestFrameSize));//Applying a window AND zero padding, the function above defaults to rectangular window
             const result = fft(chunk); //FAST FOURIER TRANSFORM
             if (chosenMagnitudeScale == "magnitude") {
                 const dataMagnitude = result.map(bin => bin.magnitude);
@@ -791,7 +789,7 @@ function sliceIntoChunks(audioBuffer) {
         const end = parseInt(realStart + FRAMESIZE, 10);
         const chunk = monoChannel.slice(realStart, end);
 
-        const windowedChunk = applyWindow(chunk);
+        const windowedChunk = applyWindow(chunk, FRAMESIZE);
         //const chunk = audioBuffer.getChannelData(0).slice(offset, offset + bufferLength);
         chunks.push(windowedChunk);
     }
@@ -799,23 +797,23 @@ function sliceIntoChunks(audioBuffer) {
     return chunks
 }
 
-function applyWindow(chunk) {
+function applyWindow(chunk, frameLength) {
     if (chosenWindow == "rectangular") {
         return chunk;
     }
 
     if (chosenWindow == "hamming") {
-        for (let n = 0; n < FRAMESIZE; n++) {
-            chunk[n] = chunk[n] * (0.54 - 0.46 * Math.cos((2 * Math.PI * n) / (FRAMESIZE - 1)));
+        for (let n = 0; n < frameLength; n++) {
+            chunk[n] = chunk[n] * (0.54 - 0.46 * Math.cos((2 * Math.PI * n) / (frameLength - 1)));
         }
 
 
     }
     if (chosenWindow == "blackman Harris") {
-        for (let n = 0; n < FRAMESIZE; n++) {
-            chunk[n] = chunk[n] * (0.35875 - 0.48829 * Math.cos((2 * Math.PI * n) / (FRAMESIZE - 1)) +
-                0.14128 * Math.cos((4 * Math.PI * n) / (FRAMESIZE - 1)) -
-                0.01168 * Math.cos((6 * Math.PI * n) / (FRAMESIZE - 1)));
+        for (let n = 0; n < frameLength; n++) {
+            chunk[n] = chunk[n] * (0.35875 - 0.48829 * Math.cos((2 * Math.PI * n) / (frameLength - 1)) +
+                0.14128 * Math.cos((4 * Math.PI * n) / (frameLength - 1)) -
+                0.01168 * Math.cos((6 * Math.PI * n) / (frameLength - 1)));
         }
     }
     return chunk;
@@ -823,8 +821,6 @@ function applyWindow(chunk) {
 }
 
 function addZeroes(frame) {
-    console.log(FRAMESIZE)
-    console.log(nFFT)
     let N = frame.length;
     if (N > nFFT) N = nFFT;
 
