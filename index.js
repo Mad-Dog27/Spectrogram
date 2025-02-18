@@ -189,6 +189,7 @@ micButtonInput.addEventListener('click', () => {
         micOn = false;
         audioContext.suspend();//Pause the audiocontext from capturing data
     } else { // If mic not on alreay, toggle on
+
         console.log("Listening to Mic")
 
         micOn = true;
@@ -261,12 +262,17 @@ powerSlider.addEventListener('input', () => {
 
 widthSlider.addEventListener('input', () => {
     //Sensitivity slider display and use, on new input
+
     WIDTH = widthSlider.value; //Storing new value in SENS
     canvasSpectrum.width = window.innerWidth * WIDTH - 2;  // 70% of screen width minus borders
     timeCanvas.width = window.innerWidth * (WIDTH) - 2;  // 70% of screen width minus borders
     timeCanvasRelativeWidth = (timeCanvas.width + 2) * 3 - 2
     widthSliderValue.textContent = WIDTH; // Update the display
     console.log(`Width: ${WIDTH}`);
+    if (micOn) {
+        canvasSpectrum.width = window.innerWidth * WIDTH / 5 - 2;  // 70% of screen width minus borders
+
+    }
 });
 
 sampleFreqSlider.addEventListener('input', () => {//Function to update the INputed Sampling freq, this will improved freqeuency resolution but only untill you reach the original inputed frequency
@@ -687,9 +693,7 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
         n++
         // Process and render all chunks up to the expected index
         while (currentChunkIndex <= expectedChunkIndex && currentChunkIndex < numChunks) { //If chunk processing is slower then expected and chunk index has not exceded total number of chunks
-            console.log(timeDiffs[n - 1])
 
-            console.log(chunks[currentChunkIndex].length)
             //while (timeDiffs[n - 1] >= chunks[currentChunkIndex].length / SAMPLEFREQ) {
             const chunk = addZeroes(chunks[currentChunkIndex]); //Zero Padding
             m++
@@ -1037,9 +1041,10 @@ function timeGraph(X) {
 
 function createMovingSpectrogram(X, effectiveChunkSize) {
     const ratio = SAMPLEFREQ / 16000;
-
+    console.log(effectiveChunkSize)
     zoom = 1;
-    const barWidth = 1;
+    let barWidth = 1;
+
     const shiftAmount = barWidth * (effectiveChunkSize / FRAMESIZE);
     shiftAccumulator += shiftAmount; // Accumulate fractional shifts
     if (shiftAccumulator >= barWidth) {
