@@ -245,7 +245,6 @@ frameSizeSlider.addEventListener('input', () => {
     FRAMESIZE = parseInt(frameSizeSlider.value, 10);
     frameSizeSliderValue.textContent = FRAMESIZE;
     //nFFT = FRAMESIZE * 2; //frequency domain amount zeroes and values aquired through fft
-
     overlap = Math.round(FRAMESIZE * overlapPercent);
 })
 
@@ -413,12 +412,15 @@ processAudioBuffer(audioBuffer);
 }
  */
 async function getMicData() {
+    const ratio = SAMPLEFREQ / audioContext.sampleRate;
+
     try {
         if (mel == null) { }//mel = melScale(); }
         // Requesting microphone acces and waiting, then creating a mediastream from it
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         const mediaStreamSource = audioContext.createMediaStreamSource(stream);
         const deviceSampleRate = audioContext.sampleRate;
+        //const ratio = SAMPLEFREQ / deviceSampleRate;
         let lowerPower = 1;
         let higherPower = 1;
         // Create an AnalyserNode for real-time frequency domain analysis
@@ -457,14 +459,13 @@ async function getMicData() {
             NOTE: getFloatFrequencyData could also be used to obtain the frequency magnitudes But I prefer to use my maths*/
             analyser.getFloatTimeDomainData(timeDomainBuffer);
 
-
             const resampledTimeDomainBuffer = resampleMicBuffer(
                 timeDomainBuffer,
                 deviceSampleRate,
                 SAMPLEFREQ
             )
             let newTimeDomainBuffer = new Float32Array(closestFrameSize * SAMPLEFREQ / deviceSampleRate)
-            newTimeDomainBuffer = addOverLap(resampledTimeDomainBuffer, prevTimeDomainBuffer);
+            newTimeDomainBuffer = addOverLap(resampledTimeDomainBuffer, prevTimeDomainBuffer, ratio);
             prevTimeDomainBuffer = resampledTimeDomainBuffer;
 
 
@@ -510,10 +511,12 @@ async function getMicData() {
         // Start processing
         processMicInput();
     } catch (error) {
+        console.log("RATIO: ", ratio)
+
         console.error("Error accessing microphone:", error); //Might be better then using console.log
     }
 }
-function addOverLap(timeDomainBuffer, prevTimeDomainBuffer) {
+/*function addOverLap(timeDomainBuffer, prevTimeDomainBuffer) { //WRONG OVERLAP SHOUDLNT INCREASE FRAMESIZE
     const prevLength = prevTimeDomainBuffer.length;
     const currLength = timeDomainBuffer.length;
     const newOverlap = Math.floor(overlapPercent * timeDomainBuffer.length);
@@ -524,6 +527,25 @@ function addOverLap(timeDomainBuffer, prevTimeDomainBuffer) {
         newCurrentBuffer[i] = prevTimeDomainBuffer[prevLength - newOverlap + i]
     }
     newCurrentBuffer.set(timeDomainBuffer, newOverlap)
+    return newCurrentBuffer;
+}*/
+
+function addOverLap(timeDomainBuffer, prevTimeDomainBuffer, ratio) { //WRONG OVERLAP SHOUDLNT INCREASE FRAMESIZE
+    const prevLength = prevTimeDomainBuffer.length;
+    const currLength = timeDomainBuffer.length;
+    const newOverlap = Math.floor(overlapPercent * FRAMESIZE * ratio);
+    let newCurrentBuffer = new Float32Array(FRAMESIZE * ratio)
+
+    if (prevLength == 0) {
+        newCurrentBuffer.set(timeDomainBuffer.subarray(0, newCurrentBuffer.length - newOverlap), newOverlap);
+        return newCurrentBuffer;
+    }
+
+    for (let i = 0; i < newOverlap; i++) {
+        newCurrentBuffer[i] = prevTimeDomainBuffer[prevLength - newOverlap + i]
+    }
+
+    newCurrentBuffer.set(timeDomainBuffer.subarray(0, newCurrentBuffer.length - newOverlap), newOverlap)
     return newCurrentBuffer;
 }
 
@@ -662,11 +684,13 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
         } else {
             timeDiffs[0] = 0;
         }
-
         n++
         // Process and render all chunks up to the expected index
         while (currentChunkIndex <= expectedChunkIndex && currentChunkIndex < numChunks) { //If chunk processing is slower then expected and chunk index has not exceded total number of chunks
+            console.log(timeDiffs[n - 1])
 
+            console.log(chunks[currentChunkIndex].length)
+            //while (timeDiffs[n - 1] >= chunks[currentChunkIndex].length / SAMPLEFREQ) {
             const chunk = addZeroes(chunks[currentChunkIndex]); //Zero Padding
             m++
             //timeGraph(chunks[currentChunkIndex]);
@@ -687,7 +711,6 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
 
             }
 
-            console.log(chosenValues)
             if (timeOn) {
                 const smoothChosenValues = applyGaussianFilter(chosenValues, kernal)
                 //drawVisual(analyser)
@@ -701,6 +724,7 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
             }
 
             currentChunkIndex++; //incrementing chunk index
+            //   }
         }
 
         // Continue updating the spectrogram if there are more chunks to process
@@ -709,7 +733,7 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
         } else {
             filePlaying = null;
         }
-        console.log(elapsedTime - prevTime)
+        //console.log(elapsedTime - prevTime)
 
         prevTime = elapsedTime;
 
@@ -1298,7 +1322,7 @@ function drawAxisLabel() {
         ctxAxis.clearRect(canvasAxis.width - 51, 0, 51, canvasAxis.height)
         const labelHeight = canvasAxis.height / numLabels;
         console.log(canvasAxis.width)
-        for (let n = 0; n <= numLabels; n++) {
+        for (let n = 1; n <= numLabels; n++) {
             const label = `${((16000 / 2) / numLabels) * n} Hz`; // Example frequency labels
             ctxAxis.fillText(label, canvasAxis.width - 51, canvasAxis.height - n * labelHeight + 4); // Adjust position as needed
 
