@@ -26,6 +26,28 @@ Replace all toggles with good toggles eg if else
 NOTE: may crash your browser :) - Blame timeGraph() function
 */
 
+// Mircophone 
+
+// 360 samples
+// .45 width
+// 32000Hz
+
+
+/*
+Plan for everything that needs to be done
+
+To do list, build a calander of when you want things done, give to Catherine,
+they will hold me accountable to deadlines in regular meeting 
+
+justine will send stuff
+
+
+
+future work that would be good to do and amount of hours to do it.
+*/
+
+
+
 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 const optionWidth = "250px"
 //Button INputs for inputing Data
@@ -129,7 +151,7 @@ let kernal = createGaussianKernel(Size, Sigma)
 let shiftAccumulator = 0; // Global or function-scoped variable
 
 let REF = 1;
-let POW = 1;
+let POW = 5;
 
 let originalAudioBuffer;
 chosenWindow = "blackman Harris"// rectangular, hamming, blackman Harris
@@ -264,15 +286,14 @@ widthSlider.addEventListener('input', () => {
     //Sensitivity slider display and use, on new input
 
     WIDTH = widthSlider.value; //Storing new value in SENS
+
     canvasSpectrum.width = window.innerWidth * WIDTH - 2;  // 70% of screen width minus borders
+
     timeCanvas.width = window.innerWidth * (WIDTH) - 2;  // 70% of screen width minus borders
     timeCanvasRelativeWidth = (timeCanvas.width + 2) * 3 - 2
     widthSliderValue.textContent = WIDTH; // Update the display
     console.log(`Width: ${WIDTH}`);
-    if (micOn) {
-        canvasSpectrum.width = window.innerWidth * WIDTH / 5 - 2;  // 70% of screen width minus borders
 
-    }
 });
 
 sampleFreqSlider.addEventListener('input', () => {//Function to update the INputed Sampling freq, this will improved freqeuency resolution but only untill you reach the original inputed frequency
@@ -418,6 +439,14 @@ processAudioBuffer(audioBuffer);
 }
  */
 async function getMicData() {
+    /*Catherines IDEA: Create big chunk of raw audio data, then break into smaller desired chunks WHILE getting next big chunk, 
+    process smaller chunks on the go. Maybe find another method of manually grabbing the timeBuffers instead of relying on Javascripts
+    Methods/function. 
+
+    If I could grab it manually I believe I would be able to accurattly procress and display the data. However in saying so, I have checked
+    and the amount of data within each timeDomainBuffer is accurate, maybe its the rate at which they are being processed. The actual data IS
+    different in magnitude compared to how it is in the Input File, this could be an issue.  
+    */
     const ratio = SAMPLEFREQ / audioContext.sampleRate;
 
     try {
@@ -464,6 +493,7 @@ async function getMicData() {
             int my timeDomainBuffer. 
             NOTE: getFloatFrequencyData could also be used to obtain the frequency magnitudes But I prefer to use my maths*/
             analyser.getFloatTimeDomainData(timeDomainBuffer);
+            console.log(timeDomainBuffer.length)
 
             const resampledTimeDomainBuffer = resampleMicBuffer(
                 timeDomainBuffer,
@@ -477,7 +507,9 @@ async function getMicData() {
 
 
             const chunk = addZeroes(applyWindow(newTimeDomainBuffer, closestFrameSize));//Applying a window AND zero padding, the function above defaults to rectangular window
+            console.log(chunk);
             const result = fft(chunk); //FAST FOURIER TRANSFORM
+            console.log(result)
             if (chosenMagnitudeScale == "magnitude") {
                 const dataMagnitude = result.map(bin => bin.magnitude);
                 chosenValues = dataMagnitude.slice(0, nFFT / 2);
@@ -540,7 +572,8 @@ function addOverLap(timeDomainBuffer, prevTimeDomainBuffer, ratio) { //WRONG OVE
     const prevLength = prevTimeDomainBuffer.length;
     const currLength = timeDomainBuffer.length;
     const newOverlap = Math.floor(overlapPercent * FRAMESIZE * ratio);
-    let newCurrentBuffer = new Float32Array(FRAMESIZE * ratio)
+    let newCurrentBuffer = new Float32Array(FRAMESIZE)
+    console.log(newCurrentBuffer)
 
     if (prevLength == 0) {
         newCurrentBuffer.set(timeDomainBuffer.subarray(0, newCurrentBuffer.length - newOverlap), newOverlap);
@@ -603,10 +636,10 @@ async function resampleAudio(audioBuffer) {
 function resampleMicBuffer(buffer, originalRate, targetRate) {
     const ratio = originalRate / targetRate;
     const newLength = Math.floor(buffer.length / ratio);
-    let newBuffer = new Float32Array(newLength);
+    let newBuffer = new Float32Array(buffer.length);
 
-    for (let i = 0; i < newLength; i++) {
-        let index = i * ratio;
+    for (let i = 0; i < ratio * newLength; i++) {
+        let index = i;
         let lowerIndex = Math.floor(index);
         let upperIndex = Math.ceil(index);
         let fraction = index - lowerIndex;
@@ -617,7 +650,7 @@ function resampleMicBuffer(buffer, originalRate, targetRate) {
             newBuffer[i] = buffer[lowerIndex]; // Edge case handling
         }
     }
-
+    console.log(newBuffer)
     return newBuffer;
 }
 
@@ -700,7 +733,7 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
             //timeGraph(chunks[currentChunkIndex]);
 
             // Fast Fourier transform of current chunk, cutting results in half then converting to magnitude
-
+            console.log(chunk)
             result = fft(chunk);
             //result[currentChunkIndex] = result[currentChunkIndex].slice(0, FRAMESIZE / 2);
 
@@ -1041,16 +1074,18 @@ function timeGraph(X) {
 
 function createMovingSpectrogram(X, effectiveChunkSize) {
     const ratio = SAMPLEFREQ / 16000;
+    console.log(SAMPLEFREQ)
     console.log(effectiveChunkSize)
-    zoom = 1;
     let barWidth = 1;
-
+    /*
     const shiftAmount = barWidth * (effectiveChunkSize / FRAMESIZE);
     shiftAccumulator += shiftAmount; // Accumulate fractional shifts
     if (shiftAccumulator >= barWidth) {
         ctxSpectrum.drawImage(canvasSpectrum, -barWidth, 0);
         shiftAccumulator -= barWidth; // Reduce accumulator by barWidth
-    }
+    }*/
+    ctxSpectrum.drawImage(canvasSpectrum, -barWidth, 0);
+
     const binHeight = canvasSpectrum.height / (nFFT / 2);
     //txSpectrum.drawImage(canvasSpectrum, -shiftAmount, 0)
     ctxSpectrum.clearRect(canvasSpectrum.width - (barWidth), 0, barWidth, canvasSpectrum.height);
@@ -1070,8 +1105,8 @@ function createMovingSpectrogram(X, effectiveChunkSize) {
             const newIntensity = (intensity / SENS) - (CONTRAST);
             const frequency = (index / (nFFT / 2)) * nyquist;
 
-            if (frequency <= 8000 / zoom) {
-                const yPosition = canvasSpectrum.height - (frequency / nyquist) * canvasSpectrum.height * ratio * zoom;
+            if (frequency <= 8000) {
+                const yPosition = canvasSpectrum.height - (frequency / nyquist) * canvasSpectrum.height * ratio;
 
                 //const freqAxis = (index / K) * samplingFreq;
                 //intensity = (intensity - 0.1) * 10
@@ -1080,7 +1115,7 @@ function createMovingSpectrogram(X, effectiveChunkSize) {
                     (canvasSpectrum.width - barWidth),           // x-coordinate
                     yPosition,               // y-coordinate
                     barWidth,                        // width
-                    binHeight * ratio * zoom                   // height
+                    binHeight * ratio                   // height
                 );
             }
         });
