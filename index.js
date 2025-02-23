@@ -447,7 +447,7 @@ async function getMicData() {
     and the amount of data within each timeDomainBuffer is accurate, maybe its the rate at which they are being processed. The actual data IS
     different in magnitude compared to how it is in the Input File, this could be an issue.  
     */
-    const ratio = SAMPLEFREQ / audioContext.sampleRate;
+    const ratio = SAMPLEFREQ / audioContext.sampleRate; //  desired / OG - 1 or lower ie ALWAYS FRACTION
 
     try {
         if (mel == null) { }//mel = melScale(); }
@@ -468,16 +468,17 @@ async function getMicData() {
         let chunkIndex = 0;
         const effectiveChunkSize = FRAMESIZE - overlap; //Subracting overlap, as that portion of chunk is accounted for in the next
         let closestFrameSize = FRAMESIZE;
+        let neededFrameSize = FRAMESIZE / ratio;
         const startTime = analyser.elapsedTime;
         // Function to process and visualize the microphone input 
         function processMicInput() {
 
             if (FRAMESIZE != analyser.fftSize) {
                 console.log(FRAMESIZE)
-                while (lowerPower < FRAMESIZE) { lowerPower <<= 1; }
+                while (lowerPower < neededFrameSize) { lowerPower <<= 1; }
                 higherPower = lowerPower;
                 lowerPower >>= 1;
-                closestFrameSize = (FRAMESIZE - lowerPower <= higherPower - FRAMESIZE) ? lowerPower : higherPower;
+                closestFrameSize = (neededFrameSize - lowerPower <= higherPower - neededFrameSize) ? lowerPower : higherPower;
                 analyser.fftSize = closestFrameSize;
                 if (closestFrameSize >= nFFT) {
                     nFFT = closestFrameSize * 2; //frequency domain amount zeroes and values aquired through fft
@@ -501,6 +502,7 @@ async function getMicData() {
                 SAMPLEFREQ
             )
             let newTimeDomainBuffer = new Float32Array(closestFrameSize * SAMPLEFREQ / deviceSampleRate)
+
             newTimeDomainBuffer = addOverLap(resampledTimeDomainBuffer, prevTimeDomainBuffer, ratio);
             prevTimeDomainBuffer = resampledTimeDomainBuffer;
 
@@ -510,17 +512,18 @@ async function getMicData() {
             console.log(chunk);
             const result = fft(chunk); //FAST FOURIER TRANSFORM
             console.log(result)
+            const dataMagnitude = result.map(bin => bin.magnitude);
+
             if (chosenMagnitudeScale == "magnitude") {
-                const dataMagnitude = result.map(bin => bin.magnitude);
                 chosenValues = dataMagnitude.slice(0, nFFT / 2);
             } else {
                 const datadB = result.map(bin => bin.dB);
                 chosenValues = datadB.slice(0, nFFT / 2)
             }
-
+            console.log(chosenValues)
 
             //drawVisual(analyser)
-            createSpectrum(chosenValues);
+            createSpectrum(dataMagnitude);
             createMovingSpectrogram(chosenValues, effectiveChunkSize);
 
             //timeGraph(timeDomainBuffer)
@@ -633,23 +636,25 @@ async function resampleAudio(audioBuffer) {
 
 }
 
-function resampleMicBuffer(buffer, originalRate, targetRate) {
+function resampleMicBuffer(buffer, originalRate, targetRate) {//This isnt doing anything right now, i am okay with that
+    //Buffer is going to be ratio times larger then need be 
     const ratio = originalRate / targetRate;
     const newLength = Math.floor(buffer.length / ratio);
     let newBuffer = new Float32Array(buffer.length);
-
-    for (let i = 0; i < ratio * newLength; i++) {
-        let index = i;
+    if (originalRate == targetRate) { return buffer; }
+    for (let i = 0; i < newLength; i++) { //newLength should be buffers original size(desired size)
+        let index = i * ratio;
         let lowerIndex = Math.floor(index);
         let upperIndex = Math.ceil(index);
         let fraction = index - lowerIndex;
 
-        if (upperIndex < buffer.length) {
+        if (upperIndex < buffer.length) { //Interpulation (if needed)
             newBuffer[i] = buffer[lowerIndex] * (1 - fraction) + buffer[upperIndex] * fraction; // Linear interpolation
         } else {
             newBuffer[i] = buffer[lowerIndex]; // Edge case handling
         }
     }
+    console.log(buffer)
     console.log(newBuffer)
     return newBuffer;
 }
@@ -759,7 +764,7 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
                 createSpectrum(chosenValues);
                 createMovingSpectrogram(chosenValues, effectiveChunkSize);
             }
-
+            console.log(chosenValues)
             currentChunkIndex++; //incrementing chunk index
             //   }
         }
@@ -1072,10 +1077,11 @@ function timeGraph(X) {
 
 }*/
 
-function createMovingSpectrogram(X, effectiveChunkSize) {
-    const ratio = SAMPLEFREQ / 16000;
-    console.log(SAMPLEFREQ)
-    console.log(effectiveChunkSize)
+function createMovingSpectrogram(X, effectiveChunkSize) {//Mic is having scaling issues because sample freq has no effect on it
+    let ratio = SAMPLEFREQ / 16000;
+    if (micOn) {
+        //ratio = 1;
+    }
     let barWidth = 1;
     /*
     const shiftAmount = barWidth * (effectiveChunkSize / FRAMESIZE);
@@ -1103,8 +1109,7 @@ function createMovingSpectrogram(X, effectiveChunkSize) {
 
             //(index / nFFT) * SAMPLEFREQ / 2
             const newIntensity = (intensity / SENS) - (CONTRAST);
-            const frequency = (index / (nFFT / 2)) * nyquist;
-
+            const frequency = 2 * (index / (nFFT / 1)) * nyquist;
             if (frequency <= 8000) {
                 const yPosition = canvasSpectrum.height - (frequency / nyquist) * canvasSpectrum.height * ratio;
 
@@ -1264,6 +1269,7 @@ function intensityToColor(intensity, maxValue, minValue) {
 
                 r = g = b = value;
             } else {
+                console.log("YES")
                 r = g = b = 255; // Default black if range is 0
             }
         } else if (chosenColourScheme == "neon") {
