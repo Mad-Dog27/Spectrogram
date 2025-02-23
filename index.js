@@ -529,7 +529,7 @@ async function getMicData() {
             //timeGraph(timeDomainBuffer)
             if (recordOn) {
                 if (!storedBuffer[chunkIndex]) {
-                    storedBuffer[chunkIndex] = resampledTimeDomainBuffer;
+                    storedBuffer[chunkIndex] = newTimeDomainBuffer;
                 } else {
                     console.warn("Chunk index already filled, potential overwrite detected.");
                 }
@@ -1109,7 +1109,7 @@ function createMovingSpectrogram(X, effectiveChunkSize) {//Mic is having scaling
 
             //(index / nFFT) * SAMPLEFREQ / 2
             const newIntensity = (intensity / SENS) - (CONTRAST);
-            const frequency = 2 * (index / (nFFT / 1)) * nyquist;
+            const frequency = (index / (nFFT / 2)) * nyquist;
             if (frequency <= 8000) {
                 const yPosition = canvasSpectrum.height - (frequency / nyquist) * canvasSpectrum.height * ratio;
 
@@ -1258,14 +1258,12 @@ function intensityToColor(intensity, maxValue, minValue) {
         const minIntensity = -150;
         const maxIntensity = 0;
         let normalized = Math.max(0, Math.min(1, (intensity - minIntensity) / (maxIntensity - minIntensity)));
-        let normalizedPowered = Math.pow((normalized), POW)
+        let normalizedPowered = Math.pow((normalized), POW) //Questionable alteration of Decibell scale, could change min and max
         let value = Math.round((1 - normalizedPowered) * 255);
-        // Map normalized value to grayscale
-        // console.log(normalized)
+        console.log(intensity)
+
         if (chosenColourScheme == "greyScale") {
             if (range != 0) {
-                // Normalize intensity to a 0-255 scale (clamped to -150 dB to 0 dB)
-
 
                 r = g = b = value;
             } else {
