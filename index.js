@@ -118,7 +118,7 @@ let timeDiffs = []
 ctxSpectrum.imageSmoothingEnabled = true;
 //Global Constants
 let FRAMESIZE = 128; //time domain amount of samples taken
-let nFFT = 512 * 4; //frequency domain amount zeroes and values aquired through fft
+let nFFT = 2048; //frequency domain amount zeroes and values aquired through fft
 let overlapPercent = 0.25;
 let overlap = Math.round(FRAMESIZE * overlapPercent);
 const SPEED = 1;
@@ -151,7 +151,7 @@ let kernal = createGaussianKernel(Size, Sigma)
 
 let shiftAccumulator = 0; // Global or function-scoped variable
 
-let REF = 1;
+let REF = 9.01;
 let POW = 5;
 
 let originalAudioBuffer;
@@ -496,7 +496,7 @@ async function getMicData() {
             closestFrameSize = higherPower;
 
             analyser.fftSize = closestNeededFrameSize;
-            if (closestFrameSize >= nFFT) {
+            if (closestFrameSize > nFFT) {
                 nFFT = closestFrameSize * 2; //frequency domain amount zeroes and values aquired through fft
             }
             //console.log("closest FRAMESIZE: ", closestFrameSize)
@@ -583,8 +583,8 @@ async function getMicData() {
 function addOverLap(timeDomainBuffer, prevTimeDomainBuffer, ratio, closestFrameSize) { //WRONG OVERLAP SHOUDLNT INCREASE FRAMESIZE
     const prevLength = prevTimeDomainBuffer.length;
     const currLength = timeDomainBuffer.length;
-    const newOverlap = Math.floor(overlapPercent * closestFrameSize * ratio);
-    let newCurrentBuffer = new Float32Array(closestFrameSize)
+    const newOverlap = Math.floor(overlapPercent * FRAMESIZE * ratio);
+    let newCurrentBuffer = new Float32Array(FRAMESIZE)
     console.log(newCurrentBuffer)
 
     if (prevLength == 0) {
@@ -647,11 +647,12 @@ async function resampleAudio(audioBuffer) {
 
 function resampleMicBuffer(buffer, originalRate, targetRate, closestFrameSize) {//This isnt doing anything right now, i am okay with that
     //Buffer is going to be ratio times larger then need be 
+
     const ratio = originalRate / targetRate;
-    const newLength = Math.floor(buffer.length);
-    let newBuffer = new Float32Array(closestFrameSize);
+    let newBuffer = new Float32Array(FRAMESIZE);
+    const newLength = Math.floor(newBuffer.length);
     if (originalRate == targetRate) { return buffer; }
-    for (let i = 0; i < newLength; i++) { //newLength should be buffers original size(desired size)
+    for (let i = 0; i < FRAMESIZE; i++) { //newLength should be buffers original size(desired size)
         let index = i * ratio;
         let lowerIndex = Math.floor(index);
         let upperIndex = Math.ceil(index);
