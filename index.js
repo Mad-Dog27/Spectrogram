@@ -25,13 +25,7 @@ Replace all toggles with good toggles eg if else
 
 NOTE: may crash your browser :) - Blame timeGraph() function
 */
-
-// Mircophone 
-
-// 360 samples
-// .45 width
-// 32000Hz
-
+// WRITTEN ON THE 27/01/2025^^^
 
 /*
 Plan for everything that needs to be done
@@ -121,7 +115,7 @@ let timeDiffs = []
 ctxSpectrum.imageSmoothingEnabled = true;
 //Global Constants
 let FRAMESIZE = 128; //time domain amount of samples taken
-let nFFT = 2048; //frequency domain amount zeroes and values aquired through fft
+let nFFT = 4096; //frequency domain amount zeroes and values aquired through fft
 let overlapPercent = 0.25;
 let overlap = Math.round(FRAMESIZE * overlapPercent);
 const SPEED = 1;
@@ -297,10 +291,7 @@ contrastSlider.addEventListener('input', () => {
 
 
 widthSlider.addEventListener('input', () => {
-    //Sensitivity slider display and use, on new input
-
-    WIDTH = widthSlider.value; //Storing new value in SENS
-
+    WIDTH = widthSlider.value;
     canvasSpectrum.width = window.innerWidth * WIDTH - 2;  // 70% of screen width minus borders
 
     timeCanvas.width = window.innerWidth * (WIDTH) - 2;  // 70% of screen width minus borders
@@ -319,8 +310,8 @@ sampleFreqSlider.addEventListener('input', () => {//Function to update the INput
     console.log(`FS: ${SAMPLEFREQ}`);
 });
 
-overlapPercSlider.addEventListener('input', () => {//Function to update the INputed Sampling freq, this will improved freqeuency resolution but only untill you reach the original inputed frequency
-    overlapPercent = overlapPercSlider.value; //
+overlapPercSlider.addEventListener('input', () => {
+    overlapPercent = overlapPercSlider.value;
     overlapPercSliderValue.textContent = overlapPercent; // Update the display
     overlap = Math.round(FRAMESIZE * overlapPercent);
     console.log(overlap)
@@ -328,22 +319,18 @@ overlapPercSlider.addEventListener('input', () => {//Function to update the INpu
 });
 
 recordButtonInput.addEventListener('click', () => {
-    //Event listener to process the audio file again, will happen on click
-
     if (recordOn) {
         recordOn = false;
         recordValue.textContent = "no"
-        //processRecording()
     } else {
+        storedBuffer = []; //reset recording
         recordOn = true;
         recordValue.textContent = "yes"
     }
 
 })
 playRecordButton.addEventListener('click', () => {
-    //Event listener to process the audio file again, will happen on click
     processRecording();
-
 })
 
 
@@ -1104,9 +1091,7 @@ function timeGraph(X) {
 
 function createMovingSpectrogram(X, effectiveChunkSize) {//Mic is having scaling issues because sample freq has no effect on it
     let ratio = SAMPLEFREQ / 16000;
-    if (micOn) {
-        //ratio = 1;
-    }
+    console.log(X.length)
     let barWidth = 1;
     /*
     const shiftAmount = barWidth * (effectiveChunkSize / FRAMESIZE);
@@ -1131,7 +1116,6 @@ function createMovingSpectrogram(X, effectiveChunkSize) {//Mic is having scaling
     const nyquist = SAMPLEFREQ / 2; // Nyquist frequency
     if (!melOn) {
         X.forEach((intensity, index) => {
-
             //(index / nFFT) * SAMPLEFREQ / 2
             const newIntensity = intensity;
             const frequency = (index / (nFFT / 2)) * nyquist;
