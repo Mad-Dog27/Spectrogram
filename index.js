@@ -90,6 +90,9 @@ const powerSlider = document.getElementById("powerSlider")
 powerSlider.style.width = "105px";
 const powerSliderValue = document.getElementById('powerSliderValue')
 
+const contrastSlider = document.getElementById("contrastSlider")
+const contrastSliderValue = document.getElementById('contrastSliderValue')
+
 
 const widthSlider = document.getElementById('widthSlider');
 widthSlider.style.width = optionWidth;
@@ -126,7 +129,7 @@ let SAMPLEFREQ = 16000;
 //Global Variables
 let SCALE = 3;
 let SENS = 1;
-let CONTRAST = 0;
+let CONTRAST = 1;
 let recordOn = false;
 let storedBuffer = [];
 let noOverlapBuffer = [];
@@ -153,6 +156,8 @@ let shiftAccumulator = 0; // Global or function-scoped variable
 
 let REF = 9.01;
 let POW = 5;
+
+let contrastOn = false;
 
 let originalAudioBuffer;
 chosenWindow = "blackman Harris"// rectangular, hamming, blackman Harris
@@ -281,6 +286,14 @@ powerSlider.addEventListener('input', () => {
     POW = powerSlider.value;
     powerSliderValue.textContent = POW;
 })
+
+contrastSlider.addEventListener('input', () => {
+    CONTRAST = contrastSlider.value;
+    contrastSliderValue.textContent = CONTRAST;
+    contrastOn = true;
+
+})
+
 
 
 widthSlider.addEventListener('input', () => {
@@ -521,9 +534,11 @@ async function getMicData() {
                 closestFrameSize
             )
             console.log("Resampled: ", resampledTimeDomainBuffer)
-            let newTimeDomainBuffer = new Float32Array(closestFrameSize * SAMPLEFREQ / deviceSampleRate)
+            let newTimeDomainBuffer = new Float32Array(FRAMESIZE)
+            console.log("Overlap added: ", newTimeDomainBuffer)
 
             newTimeDomainBuffer = addOverLap(resampledTimeDomainBuffer, prevTimeDomainBuffer, ratio, closestFrameSize);
+
             prevTimeDomainBuffer = resampledTimeDomainBuffer;
             console.log("Overlap added: ", newTimeDomainBuffer)
 
@@ -1118,7 +1133,7 @@ function createMovingSpectrogram(X, effectiveChunkSize) {//Mic is having scaling
         X.forEach((intensity, index) => {
 
             //(index / nFFT) * SAMPLEFREQ / 2
-            const newIntensity = (intensity / SENS) - (CONTRAST);
+            const newIntensity = intensity;
             const frequency = (index / (nFFT / 2)) * nyquist;
             if (frequency <= 8000) {
                 const yPosition = canvasSpectrum.height - (frequency / nyquist) * canvasSpectrum.height * ratio;
@@ -1173,6 +1188,7 @@ function intensityToColor(intensity, maxValue, minValue) {
     const noiseThreshold = 0.1; // Define a threshold for noise (adjust as needed)
     const range = maxValue - minValue;
     let r, g, b;
+    let val;
     if (micOn) {
         //intensity = Math.pow(intensity, 2)
 
@@ -1272,6 +1288,19 @@ function intensityToColor(intensity, maxValue, minValue) {
         let value = Math.round((1 - normalizedPowered) * 255);
 
         if (chosenColourScheme == "greyScale") {
+            if (contrastOn) {
+                /*if (value < 100) {
+                    val = 100 - value
+                    value -= val * CONTRAST;
+
+                } */
+                if (value > 150) {
+                    val = value - 150
+                    value = value + (value - 150) * CONTRAST;
+                }
+
+            }
+
             if (range != 0) {
 
                 r = g = b = value;
