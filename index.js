@@ -292,7 +292,7 @@ contrastSlider.addEventListener('input', () => {
 
 widthSlider.addEventListener('input', () => {
     WIDTH = widthSlider.value;
-    canvasSpectrum.width = window.innerWidth * WIDTH - 2;  // 70% of screen width minus borders
+    canvasSpectrum.width = window.innerWidth * (WIDTH*3) - 2;  // 70% of screen width minus borders
 
     timeCanvas.width = window.innerWidth * (WIDTH) - 2;  // 70% of screen width minus borders
     timeCanvasRelativeWidth = (timeCanvas.width + 2) * 3 - 2
@@ -1090,7 +1090,7 @@ function timeGraph(X) {
 }*/
 
 function createMovingSpectrogram(X, effectiveChunkSize) {//Mic is having scaling issues because sample freq has no effect on it
-    let ratio = SAMPLEFREQ / 16000;
+    let ratio = 1//SAMPLEFREQ / 16000;
     console.log(X.length)
     let barWidth = 1;
     /*
@@ -1119,7 +1119,7 @@ function createMovingSpectrogram(X, effectiveChunkSize) {//Mic is having scaling
             //(index / nFFT) * SAMPLEFREQ / 2
             const newIntensity = intensity;
             const frequency = (index / (nFFT / 2)) * nyquist;
-            if (frequency <= 8000) {
+            if (frequency <= 32000) {
                 const yPosition = canvasSpectrum.height - (frequency / nyquist) * canvasSpectrum.height * ratio;
 
                 //const freqAxis = (index / K) * samplingFreq;
