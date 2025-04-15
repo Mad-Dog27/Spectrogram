@@ -183,7 +183,7 @@ audioFileInput.addEventListener('change', async (event) => { //AUDIO FILE INPUT
     //mel = melScale()
     // Process the audio buffer (e.g., generate a spectrogram)
     filePlaying = true;
-    processAudioBuffer(audioBuffer);
+    setUpAudioBuffer(audioBuffer);
 });
 
 
@@ -201,7 +201,7 @@ processAgainInput.addEventListener('click', () => {//  PROCCESS AGAIN
     console.log(avg)
 
     console.log("proccessing again")
-    processAudioBuffer(audioBuffer);
+    setUpAudioBuffer(audioBuffer);
 
 })
 micButtonInput.addEventListener('click', () => {
@@ -673,13 +673,13 @@ function resampleMicBuffer(buffer, originalRate, targetRate, closestFrameSize) {
 
 
 
-async function processAudioBuffer(audioBuffer) {
+async function setUpAudioBuffer(audioBuffer) {
     //Outputting the Audiobuffer characterestics
     console.log('Audio Buffer:', audioBuffer);
     console.log('Sample Rate:', audioBuffer.sampleRate);
     console.log('Number of Channels:', audioBuffer.numberOfChannels);
     console.log('Duration (s):', audioBuffer.duration);
-    console.log(audioBuffer.length);
+
     originalAudioBuffer = audioBuffer;
     audioBuffer = await resampleAudio(audioBuffer);
     //Exectuting the FFT for file input
@@ -730,7 +730,7 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
     let b = 0;
     let sum = 0;
     // Function to update the spectrogram
-    function updateSpectrogram() {
+    function processAudioFileChunks() {
         // Calculate the expected chunk index based on current playback time
         const elapsedTime = audioContext.currentTime - startTime;
         const expectedChunkIndex = Math.floor(elapsedTime / chunkDuration);
@@ -783,7 +783,7 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
 
         // Continue updating the spectrogram if there are more chunks to process
         if (currentChunkIndex < numChunks) {
-            requestAnimationFrame(updateSpectrogram);
+            requestAnimationFrame(processAudioFileChunks);
         } else {
             filePlaying = null;
         }
@@ -795,7 +795,7 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
 
     // Start updating the spectrogram
 
-    requestAnimationFrame(updateSpectrogram);
+    requestAnimationFrame(processAudioFileChunks);
 
 }
 function createGaussianKernel(size, sigma) {
