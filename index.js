@@ -170,6 +170,7 @@ let timeCanvasRelativeWidth = (timeCanvas.width + 2) - 2
 drawAxisLabel();
 
 
+// ---------------------------vvv- INTERRUPTS -vvv----------------------------------------
 
 //Adds an event listnener for the audioFileInput button, when the input file is changed the function will run after the file is changed.
 audioFileInput.addEventListener('change', async (event) => { //AUDIO FILE INPUT
@@ -185,7 +186,6 @@ audioFileInput.addEventListener('change', async (event) => { //AUDIO FILE INPUT
     filePlaying = true;
     processAudioBuffer(audioBuffer);
 });
-
 
 processAgainInput.addEventListener('click', () => {//  PROCCESS AGAIN
     //Event listener to process the audio file again, will happen on click
@@ -219,6 +219,7 @@ micButtonInput.addEventListener('click', () => {
         getMicData();
     }
 })
+//mel scale input
 melButtonInput.addEventListener('click', () => {
 
     if (melOn) {
@@ -234,6 +235,7 @@ melButtonInput.addEventListener('click', () => {
     console.log("Mel toggled ", melOn)
 
 })
+//Actually for Gausian smoothing 
 timeButtonInput.addEventListener('click', () => {
 
 
@@ -245,6 +247,7 @@ timeButtonInput.addEventListener('click', () => {
         isTime.textContent = "On"
     }
 })
+//magnitude select input
 magnitudeSelect.addEventListener('change', (event) => {
     //Changing the window value, between Rectangular, hamming and blackman-harris
     chosenMagnitudeScale = event.target.value;
@@ -264,23 +267,24 @@ colourSchemeSelect.addEventListener('change', (event) => {
     chosenColourScheme = event.target.value;
     console.log(`Colour Scheme Selected: ${chosenColourScheme}`);
 });
+//frame size select
 frameSizeSlider.addEventListener('input', () => {
     FRAMESIZE = parseInt(frameSizeSlider.value, 10);
     frameSizeSliderValue.textContent = FRAMESIZE;
     //nFFT = FRAMESIZE * 2; //frequency domain amount zeroes and values aquired through fft
     overlap = Math.round(FRAMESIZE * overlapPercent);
 })
-
+//reference input for dB
 refSlider.addEventListener('input', () => {
     REF = refSlider.value;
     refSliderValue.textContent = REF;
 })
-
+// power input for dB 
 powerSlider.addEventListener('input', () => {
     POW = powerSlider.value;
     powerSliderValue.textContent = POW;
 })
-
+//contrast slider input
 contrastSlider.addEventListener('input', () => {
     CONTRAST = contrastSlider.value;
     contrastSliderValue.textContent = CONTRAST;
@@ -288,8 +292,7 @@ contrastSlider.addEventListener('input', () => {
 
 })
 
-
-
+//width slider, for width of spectrogram displayed
 widthSlider.addEventListener('input', () => {
     WIDTH = widthSlider.value;
     canvasSpectrum.width = window.innerWidth * (WIDTH*3) - 2;  // 70% of screen width minus borders
@@ -301,23 +304,28 @@ widthSlider.addEventListener('input', () => {
 
 });
 
+//sample frequcy slider input
 sampleFreqSlider.addEventListener('input', () => {//Function to update the INputed Sampling freq, this will improved freqeuency resolution but only untill you reach the original inputed frequency
     SAMPLEFREQ = sampleFreqSlider.value; //
     sampleFreqSliderValue.textContent = SAMPLEFREQ; // Update the display
-    mel = melScale();
+    //adjust mel accordingly
+    mel = melScale(); 
+    //redraw the axis
     drawAxisLabel();
 
     console.log(`FS: ${SAMPLEFREQ}`);
 });
-
+// overlap input
 overlapPercSlider.addEventListener('input', () => {
     overlapPercent = overlapPercSlider.value;
     overlapPercSliderValue.textContent = overlapPercent; // Update the display
+    //recalculate amount of samples in overlap
     overlap = Math.round(FRAMESIZE * overlapPercent);
     console.log(overlap)
 
 });
 
+//Record toggle input
 recordButtonInput.addEventListener('click', () => {
     if (recordOn) {
         recordOn = false;
@@ -327,122 +335,17 @@ recordButtonInput.addEventListener('click', () => {
         recordOn = true;
         recordValue.textContent = "yes"
     }
-
 })
+// play the recording input
 playRecordButton.addEventListener('click', () => {
     processRecording();
 })
 
+// -------------------------- INTERRUPTS DONE -----------------------------
 
 
 
-
-function processRecording() {
-    for (let chunkIndex = 0; chunkIndex < storedBuffer.length; chunkIndex++) {
-        const chunk = addZeroes(applyWindow(storedBuffer[chunkIndex], FRAMESIZE));//Applying a window AND zero padding, the function above defaults to rectangular window
-        const result = fft(chunk); //FAST FOURIER TRANSFORM
-
-        if (chosenMagnitudeScale == "magnitude") {
-            const dataMagnitude = result.map(bin => bin.magnitude);
-            
-            chosenValues = dataMagnitude.slice(0, nFFT / 2)
-        } else {
-            const datadB = result.map(bin => bin.dB);
-            chosenValues = datadB.slice(0, nFFT / 2)
-        }
-
-        //drawVisual(analyser)
-        createSpectrum(chosenValues);
-        createMovingSpectrogram(chosenValues);
-    }
-    /*
-    audioBuffer = null;
-    let combinedBuffer = combineBuffers(noOverlapBuffer);
-    console.log(noOverlapBuffer)
-    console.log(combinedBuffer)
-    audioBuffer = audioContext.createBuffer(
-        1, // Number of channels
-        noOverlapBuffer.length, // Length of the buffer
-        SAMPLEFREQ // Sample rate
-    );
-
-    // Copy the combined buffer into the AudioBuffer
-    audioBuffer.getChannelData(0).set(combinedBuffer);
-
-    // Create a source and play the buffer
-    const source = audioContext.createBufferSource();
-    source.buffer = audioBuffer;
-    source.connect(audioContext.destination);
-    source.start(0);
-    RecordProcessing = true;
-
-    processAudioBuffer(audioBuffer);*/
-}
-
-/*async function getMicData() {
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        const mediaStreamSource = audioContext.createMediaStreamSource(stream);
-        const deviceSampleRate = audioContext.sampleRate; // Mic sample rate
-        console.log("Device Sample Rate:", deviceSampleRate);
- 
-        // Set up AnalyserNode for real-time audio processing
-        const analyser = audioContext.createAnalyser();
-        analyser.fftSize = FRAMESIZE;
-        mediaStreamSource.connect(analyser);
- 
-        let prevTimeDomainBuffer = [];
-        let chunkIndex = 0;
-        const dataArray = new Float32Array(analyser.frequencyBinCount);
- 
-        async function processMicInput() {
-            let timeDomainBuffer = new Float32Array(FRAMESIZE);
-            analyser.getFloatTimeDomainData(timeDomainBuffer);
-            timeDomainBuffer = addOverLap(timeDomainBuffer, prevTimeDomainBuffer);
-            prevTimeDomainBuffer = timeDomainBuffer;
- 
-            // **Resampling Step** (Uses linear interpolation)
-            const resampledTimeDomainBuffer = resampleMicBuffer(timeDomainBuffer, deviceSampleRate, SAMPLEFREQ);
- 
-            // Apply windowing and FFT
-            const chunk = addZeroes(applyWindow(resampledTimeDomainBuffer));
-            const result = fft(chunk);
- 
-            // Convert to chosen scale
-            const chosenValues = chosenMagnitudeScale === "magnitude"
-                ? result.map(bin => bin.magnitude).slice(0, nFFT / 2)
-                : result.map(bin => bin.dB).slice(0, nFFT / 2);
- 
-            createSpectrum(chosenValues);
-            createMovingSpectrogram(chosenValues);
- 
-            if (recordOn) {
-                if (!storedBuffer[chunkIndex]) {
-                    storedBuffer[chunkIndex] = resampledTimeDomainBuffer;
-                } else {
-                    console.warn("Chunk index already filled, potential overwrite detected.");
-                }
-                chunkIndex++;
-            }
- 
-            if (micOn) {
-                requestAnimationFrame(processMicInput);
-            } else {
-                mediaStreamSource.disconnect();
-                analyser.disconnect();
-                stream.getTracks().forEach(track => track.stop());
-                console.log('Stream processing stopped.');
-            }
-        }
- 
-        processMicInput();
- 
-    } catch (error) {
-        console.error("Error accessing microphone:", error);
-    }
-}
- */
+//Grabs and processes the realtime mic data
 async function getMicData() {
     /*Catherines IDEA: Create big chunk of raw audio data, then break into smaller desired chunks WHILE getting next big chunk, 
     process smaller chunks on the go. Maybe find another method of manually grabbing the timeBuffers instead of relying on Javascripts
@@ -453,6 +356,8 @@ async function getMicData() {
     different in magnitude compared to how it is in the Input File, this could be an issue.  
     */
     let ratio =  SAMPLEFREQ/  audioContext.sampleRate ; 
+    let dataMagnitude;
+    let prevChunkTime = 0;
 
     try {
         if (mel == null) { }//mel = melScale(); }
@@ -479,48 +384,49 @@ async function getMicData() {
         const startTime = audioContext.currentTime;
         let expectedChunkTime = FRAMESIZE / SAMPLEFREQ;
         let chunkTime = 0;
-        console.log(startTime)
         // Function to process and visualize the microphone input 
         function processMicInput() {
-            //ratio = audioContext.sampleRate /SAMPLEFREQ;  //always larger then 1
+            // check if current time is larger then the expected chunk time
             if (chunkTime >= expectedChunkTime) {
-            //if (FRAMESIZE != analyser.fftSize) {
+            // calculate the closestneeded framesize (to the power of 2) to the users desired frame size,
+            // this is used for resampling as, if lowereing Fs, more samples are needed to maintain same sized chunks
             while (lowerPower * 2 < neededFrameSize) { lowerPower <<= 1; }
             higherPower = lowerPower * 2;
             lowerPower >>= 1;
             closestNeededFrameSize = higherPower;
             higherPower = 1;
             lowerPower = 1;
-
+            // calculating closest frame size to the power of 2 to the users desired. This is redundant right now
             while (lowerPower < FRAMESIZE) { lowerPower <<= 1; }
             higherPower = lowerPower;
             lowerPower >>= 1;
             closestFrameSize = higherPower;
 
-            analyser.fftSize = closestNeededFrameSize;
-            if (closestFrameSize > nFFT) {
+            if (closestFrameSize > nFFT) { 
                 nFFT = closestFrameSize * 2; //frequency domain amount zeroes and values aquired through fft
             }
+            //matching fftSize to the closestNeededFrameSize, this is becuase the analyser is only being used to collect the
+            //time domain samples, there fftsize only effects the amount of samples taken. 
+            analyser.fftSize = closestNeededFrameSize; 
 
      
 
             //New array/Buffer to store the audio samples
             let timeDomainBuffer = new Float32Array(closestNeededFrameSize); //Larger than expected, see insied resample
-            //analyser.sampleRate = 16000;
-            //console.log(analyser.sampleRate)
+            
             /*In the audio file processing, I store the audio data myself, but in this case I am not able to access
             the audio buffer, so am making use of getFloatTimeDomainData which stores the audio data from the analyser
             int my timeDomainBuffer. 
             NOTE: getFloatFrequencyData could also be used to obtain the frequency magnitudes But I prefer to use my maths*/
             analyser.getFloatTimeDomainData(timeDomainBuffer);
 
-            const resampledTimeDomainBuffer = resampleMicBuffer(
+            const resampledTimeDomainBuffer = resampleMicBuffer( //resampling
                 timeDomainBuffer,
                 deviceSampleRate,
                 SAMPLEFREQ,
                 closestFrameSize
             )
-            let newTimeDomainBuffer = new Float32Array(FRAMESIZE)
+            let newTimeDomainBuffer = new Float32Array(FRAMESIZE) //adding overlap to the resampled buffer
             
             newTimeDomainBuffer = addOverLap(resampledTimeDomainBuffer, prevTimeDomainBuffer, ratio, closestFrameSize);
             prevTimeDomainBuffer = resampledTimeDomainBuffer;
@@ -528,9 +434,10 @@ async function getMicData() {
 
             const chunk = addZeroes(applyWindow(newTimeDomainBuffer, FRAMESIZE));//Applying a window AND zero padding, the function above defaults to rectangular window
             const result = fft(chunk); //FAST FOURIER TRANSFORM
-            const dataMagnitude = result.map(bin => bin.magnitude);
 
+            //magnitude selection 
             if (chosenMagnitudeScale == "magnitude") {
+                dataMagnitude = result.map(bin => bin.magnitude); //grabbing the magnitude output
                 chosenValues = normalise(dataMagnitude.slice(0, nFFT / 2));
 
             } else {
@@ -538,20 +445,16 @@ async function getMicData() {
                 chosenValues = datadB.slice(0, nFFT / 2)
             }
 
-            //drawVisual(analyser)
             createSpectrum(dataMagnitude);
             createMovingSpectrogram(chosenValues, effectiveChunkSize);
 
-            //timeGraph(timeDomainBuffer)
-            if (recordOn) {
+            if (recordOn) { //record mic input 
                 if (!storedBuffer[chunkIndex]) {
                     noOverlapBuffer[chunkIndex] = resampledTimeDomainBuffer;
                     storedBuffer[chunkIndex] = newTimeDomainBuffer;
                 } else {
                     console.warn("Chunk index already filled, potential overwrite detected.");
                 }
-                //storedBuffer[chunkIndex] = timeDomainBuffer;
-                //storedBuffer[chunkIndex] = normalizeChunk(timeDomainBuffer, 0.9);
                 chunkIndex++;
             }
             }
@@ -563,76 +466,61 @@ async function getMicData() {
                 stream.getTracks().forEach(track => track.stop()); // Stops the media stream tracks
                 console.log('Stream processing stopped.');
             }
-            chunkTime = audioContext.currentTime - startTime;
+           
+            chunkTime = audioContext.currentTime - startTime - prevChunkTime; //calculating how long this chunk has occured.
+            prevChunkTime += chunkTime; //sum of all prev chunk times
+            
             console.log(chunkTime)
+            console.log(prevChunkTime)
+
 
         }
 
         // Start processing
         processMicInput();
     } catch (error) {
-        console.log("RATIO: ", ratio)
 
         console.error("Error accessing microphone:", error); //Might be better then using console.log
     }
 }
 
+// addoverlap to a buffer using the previous buffer
 function addOverLap(timeDomainBuffer, prevTimeDomainBuffer, ratio, closestFrameSize) { //WRONG OVERLAP SHOUDLNT INCREASE FRAMESIZE
+    
     const prevLength = prevTimeDomainBuffer.length;
-    const currLength = timeDomainBuffer.length;
+    //new overlap in terms of samples
     const newOverlap = Math.floor(overlapPercent * FRAMESIZE);
+    
     let newCurrentBuffer = new Float32Array(FRAMESIZE)
-    if (prevLength == 0) {
+    if (prevLength == 0) { // if no previous buffer, then no overlap applied 
         newCurrentBuffer.set(timeDomainBuffer.subarray(0, newCurrentBuffer.length - newOverlap), newOverlap);
         return newCurrentBuffer;
     }
 
-    for (let i = 0; i < newOverlap; i++) {
+    for (let i = 0; i < newOverlap; i++) { // add end overlap amount of samples of previous buffer to the start of the new buffer
         newCurrentBuffer[i] = prevTimeDomainBuffer[prevLength - newOverlap + i]
     }
-    
+    // add the rest of the buffer
     newCurrentBuffer.set(timeDomainBuffer.subarray(0, newCurrentBuffer.length - newOverlap), newOverlap)
-
-
-    //tested, works
 
     return newCurrentBuffer;
 }
 
-function combineBuffers(buffers) {
-    // Calculate total length, subtracting overlap for transitions
-    let size = 0;
-    buffers.forEach((chunk, index) => {
-        size += chunk.length;
-    })
-
-    const totalLength = size;
-    const combinedBuffer = new Float32Array(totalLength);
-
-    let offset = 0; // Starting position in the combinedBuffer
-    buffers.forEach((buffer, index) => {
-        for (let i = 0; i < buffer.length; i++) {
-            // Add the sample to the combinedBuffer, taking overlap into account
-            combinedBuffer[offset + i] += buffer[i];
-        }
-        // Move the offset forward
-        offset += buffer.length;
-    });
-    return combinedBuffer;
-}
+// resampling an audiobuffer for File Input only
 async function resampleAudio(audioBuffer) {
     const originalSampleFreq = audioBuffer.sampleRate;
-
+    // if no resampling needed
     if (originalSampleFreq == SAMPLEFREQ) {
         return audioBuffer;
     }
 
-
+    // new audioconext to do the resampling, offline means its local and not conflicting with global audio context
     const offlineContext = new OfflineAudioContext(
         audioBuffer.numberOfChannels,
         Math.ceil(audioBuffer.length * (SAMPLEFREQ / originalSampleFreq)),
         SAMPLEFREQ
     );
+    // source and audio buffer attached to that offline audiocontext
     const source = offlineContext.createBufferSource();
     source.buffer = audioBuffer;
     source.connect(offlineContext.destination);
@@ -640,22 +528,24 @@ async function resampleAudio(audioBuffer) {
     source.start(0);
 
     const newBuffer = await offlineContext.startRendering();
-    return newBuffer;
+    return newBuffer; //new resampled buffer
 
 }
 
+//resampling for mic buffer, (it cant use audioconexts)
 function resampleMicBuffer(buffer, originalRate, targetRate, closestFrameSize) {//This works
-    //Buffer is going to be ratio times larger then need be 
+    //Buffer is going to be ratio times larger then need be, this is becuase of interpolation, lower freqs skip a certain
+    // amount of samples, but still needs to be same size, therefore original bufffer needs to be larger
 
-    const ratio = originalRate / targetRate; //always larger
+    const ratio = originalRate / targetRate; // deviceFS / sampleFREQ (user chosen)
     let newBuffer = new Float32Array(FRAMESIZE);
-    const newLength = Math.floor(newBuffer.length);
-    if (originalRate == targetRate) { return buffer; }
+    if (originalRate == targetRate) { return buffer; } // if no resampling needed
     for (let i = 0; i < FRAMESIZE; i++) { //newLength should be buffers original size(desired size)
+        // by grabbing every ratio sample, means sample freq is lowered by ratio
         let index = i * ratio;
         let lowerIndex = Math.floor(index);
         let upperIndex = Math.ceil(index);
-        let fraction = index - lowerIndex;
+        let fraction = index - lowerIndex; // if not a clean ratio, ie decimal
 
         if (upperIndex < buffer.length) { //Interpulation (if needed)
             newBuffer[i] = buffer[lowerIndex] * (1 - fraction) + buffer[upperIndex] * fraction; // Linear interpolation
@@ -667,8 +557,28 @@ function resampleMicBuffer(buffer, originalRate, targetRate, closestFrameSize) {
     return newBuffer;
 }
 
+// Process recording from microphone - still in testing
+function processRecording() {
+    for (let chunkIndex = 0; chunkIndex < storedBuffer.length; chunkIndex++) {
+        const chunk = addZeroes(applyWindow(storedBuffer[chunkIndex], FRAMESIZE));//Applying a window AND zero padding, the function above defaults to rectangular window
+        const result = fft(chunk); //FAST FOURIER TRANSFORM
 
+        if (chosenMagnitudeScale == "magnitude") {
+            const dataMagnitude = result.map(bin => bin.magnitude);
+            
+            chosenValues = dataMagnitude.slice(0, nFFT / 2)
+        } else {
+            const datadB = result.map(bin => bin.dB);
+            chosenValues = datadB.slice(0, nFFT / 2)
+        }
 
+        //drawVisual(analyser)
+        createSpectrum(chosenValues);
+        createMovingSpectrogram(chosenValues);
+    }
+}
+   
+// process file input audio buffer (setup)
 async function processAudioBuffer(audioBuffer) {
     //Outputting the Audiobuffer characterestics
     console.log('Audio Buffer:', audioBuffer);
@@ -698,7 +608,6 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
     */
     //Dealing with the new AudioContext and audioBuffer and connecting the source to it
 
-    //const audioContext = new AudioContext();
 
 
     /*For the next step, the audioBuffer needs to be cut into respective chunks for audioProccessing, 
@@ -737,45 +646,38 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
             timeDiffs[0] = 0;
         }
         n++
-        // Process and render all chunks up to the expected index
+        // Process and render all chunks up to the expected index -- ADD A TIME BASED CONSTRAINT
         while (currentChunkIndex <= expectedChunkIndex && currentChunkIndex < numChunks) { //If chunk processing is slower then expected and chunk index has not exceded total number of chunks
 
-            //while (timeDiffs[n - 1] >= chunks[currentChunkIndex].length / SAMPLEFREQ) {
             const chunk = addZeroes(chunks[currentChunkIndex]); //Zero Padding
             m++
-            //timeGraph(chunks[currentChunkIndex]);
 
             // Fast Fourier transform of current chunk, cutting results in half then converting to magnitude
             console.log(chunk)
             result = fft(chunk);
-            //result[currentChunkIndex] = result[currentChunkIndex].slice(0, FRAMESIZE / 2);
 
-            //Updating all Graphs 
+            // magnitude select
             if (!isDB) {
                 const dataMagnitude = result.map(bin => bin.magnitude);
-                chosenValues = normalise(dataMagnitude.slice(0, nFFT / 2));
+                chosenValues = (dataMagnitude.slice(0, nFFT / 2));
 
             } else {
                 const datadB = result.map(bin => bin.dB);
                 chosenValues = datadB.slice(0, nFFT / 2)
-
-
             }
-
-            if (timeOn) {
+ 
+            if (timeOn) { // NOT TIME ON, gaussian smoothing
                 const smoothChosenValues = applyGaussianFilter(chosenValues, kernal)
-                //drawVisual(analyser)
 
                 createSpectrum(chosenValues);
                 createMovingSpectrogram(smoothChosenValues, effectiveChunkSize);
 
-            } else {
+            } else { // normal display
                 createSpectrum(chosenValues);
                 createMovingSpectrogram(chosenValues, effectiveChunkSize);
             }
-            console.log(chosenValues)
             currentChunkIndex++; //incrementing chunk index
-            //   }
+            
         }
 
         // Continue updating the spectrogram if there are more chunks to process
@@ -784,7 +686,6 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
         } else {
             filePlaying = null;
         }
-        //console.log(elapsedTime - prevTime)
 
         prevTime = elapsedTime;
 
@@ -796,7 +697,7 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
 
 }
 
-function normalise(values) {
+function normalise(values) { // this function works perfectly, BUT commented out because normalisation doesnt work when noise is only presented
     return values;
 
     maxVal = Math.max(...values);
