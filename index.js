@@ -106,7 +106,7 @@ let timeDiffs = []
 ctxSpectrum.imageSmoothingEnabled = true;
 //Global Constants
 let FRAMESIZE = 128; //time domain amount of samples taken
-let nFFT = 4096; //frequency domain amount zeroes and values aquired through fft
+let nFFT = 4096/2; //frequency domain amount zeroes and values aquired through fft
 let overlapPercent = 0.25;
 let overlap = Math.round(FRAMESIZE * overlapPercent);
 const SPEED = 1;
@@ -134,7 +134,7 @@ let HEIGHT = 0.7;  //0.49  DOESNT EFFECT - No point
 let RecordProcessing = false;
 
 let expectedChunkTime = FRAMESIZE / SAMPLEFREQ;
-
+let frameUpdated = false;
 
 let Size = 5;
 let Sigma = 10.0;
@@ -163,7 +163,10 @@ timeCanvas.height = window.innerHeight * 0.45 - 2;  // 45% of screen height minu
 let timeCanvasRelativeWidth = (timeCanvas.width + 2) - 2
 drawAxisLabel();
 
+let filechunk = [];
+let micchunk = [];
 
+let intervalId = null;
 // ---------------------------vvv- INTERRUPTS -vvv----------------------------------------
 
 //Adds an event listnener for the audioFileInput button, when the input file is changed the function will run after the file is changed.
@@ -267,7 +270,8 @@ frameSizeSlider.addEventListener('input', () => {
     frameSizeSliderValue.textContent = FRAMESIZE;
     expectedChunkTime = FRAMESIZE / SAMPLEFREQ;
     console.log(expectedChunkTime)
-
+    frameUpdated = true;
+    intervalId = null;
     //nFFT = FRAMESIZE * 2; //frequency domain amount zeroes and values aquired through fft
     overlap = Math.round(FRAMESIZE * overlapPercent);
 })
@@ -309,8 +313,12 @@ sampleFreqSlider.addEventListener('input', () => {//Function to update the INput
     mel = melScale(); 
     //redraw the axis
     drawAxisLabel();
-
+    expectedChunkTime = FRAMESIZE / SAMPLEFREQ;
+    frameUpdated = true;
+    intervalId = null;
     console.log(`FS: ${SAMPLEFREQ}`);
+        console.log(expectedChunkTime)
+
 });
 // overlap input
 overlapPercSlider.addEventListener('input', () => {
@@ -353,7 +361,7 @@ async function getMicData() {
     different in magnitude compared to how it is in the Input File, this could be an issue.  
     */
     let ratio =  SAMPLEFREQ/  audioContext.sampleRate ; 
-    let dataMagnitude;
+    let dataMagnitude, datadB;
     let prevChunkTime = 0;
 
     try {
@@ -367,26 +375,29 @@ async function getMicData() {
         let higherPower = 1;
         // Create an AnalyserNode for real-time frequency domain analysis
         const analyser = audioContext.createAnalyser();
-        analyser.fftSize = 128;
+        analyser.fftSize = 4096;
         mediaStreamSource.connect(analyser);
         let prevTimeDomainBuffer = [];
-        // Array to store time-domain or frequency-domain data
-        const dataArray = new Float32Array(analyser.frequencyBinCount);
+     
         let chunkIndex = 0;
         const effectiveChunkSize = FRAMESIZE - overlap; //Subracting overlap, as that portion of chunk is accounted for in the next
         let closestFrameSize = FRAMESIZE;
         let neededFrameSize = FRAMESIZE / ratio;
         let closestNeededFrameSize = neededFrameSize;
-
+        let runs = 0;
+        let runTime = 0;
         const startTime = audioContext.currentTime;
         let chunkTime = 0;
         // Function to process and visualize the microphone input 
         function processMicInput() {
-
+            runs++;
             // check if current time is larger then the expected chunk time
             if (chunkTime >= expectedChunkTime) {
+                            console.log(chunkTime)
+
             // calculate the closestneeded framesize (to the power of 2) to the users desired frame size,
             // this is used for resampling as, if lowereing Fs, more samples are needed to maintain same sized chunks
+            if (frameUpdated) {
             while (lowerPower * 2 < neededFrameSize) { lowerPower <<= 1; }
             higherPower = lowerPower * 2;
             lowerPower >>= 1;
@@ -399,6 +410,8 @@ async function getMicData() {
             lowerPower >>= 1;
             closestFrameSize = higherPower;
             analyser.fftSize = closestNeededFrameSize; 
+            frameUpdated = false;
+            }
 
             if (closestFrameSize > nFFT) { 
                 nFFT = closestFrameSize * 2; //frequency domain amount zeroes and values aquired through fft
@@ -406,7 +419,7 @@ async function getMicData() {
             //matching fftSize to the closestNeededFrameSize, this is becuase the analyser is only being used to collect the
             //time domain samples, there fftsize only effects the amount of samples taken. 
 
-     
+            
 
             //New array/Buffer to store the audio samples
             let timeDomainBuffer = new Float32Array(closestNeededFrameSize); //Larger than expected, see insied resample
@@ -431,21 +444,23 @@ async function getMicData() {
 
             const chunk = addZeroes(applyWindow(newTimeDomainBuffer, FRAMESIZE));//Applying a window AND zero padding, the function above defaults to rectangular window
             const result = fft(chunk); //FAST FOURIER TRANSFORM
-
             //magnitude selection 
             if (chosenMagnitudeScale == "magnitude") {
-                dataMagnitude = result.map(bin => bin.magnitude); //grabbing the magnitude output
-                chosenValues = normalise(dataMagnitude.slice(0, nFFT / 2));
-                /*const data = computeMagnitudeAndDB(result);
-                //dataMagnitude = data.map(bin => bin.magnitude);
+                const data = computeMagnitudeAndDB(result, 1, false);
+
+                dataMagnitude = data.map(bin => bin.magnitude);
                 chosenValues = (dataMagnitude.slice(0, nFFT / 2));
-                */
+                
             } else {
-                const datadB = result.map(bin => bin.dB);
+                const data = computeMagnitudeAndDB(result, 1, true);
+
+                datadB = data.map(bin => bin.dB);
+                console.log(datadB)
+
                 chosenValues = datadB.slice(0, nFFT / 2)
             }
-
-            createSpectrum(dataMagnitude);
+           
+            //createSpectrum(dataMagnitude);
             createMovingSpectrogram(chosenValues, effectiveChunkSize);
             prevChunkTime += chunkTime; //sum of all prev chunk times
             if (recordOn) { //record mic input 
@@ -458,18 +473,30 @@ async function getMicData() {
                 chunkIndex++;
             }
             }
+             runTime = audioContext.currentTime - startTime;
+
+            chunkTime = runTime - prevChunkTime; //calculating how long this chunk has occured.
+            if (intervalId == null) {
+             intervalId = setInterval(() => {
             if (micOn) {
-                requestAnimationFrame(processMicInput); //Keep calling proccessMicINput
+                processMicInput();
             } else {
-                mediaStreamSource.disconnect();
+                
+                clearInterval(intervalId);
+                intervalId = null;
+            mediaStreamSource.disconnect();
                 analyser.disconnect();
-                stream.getTracks().forEach(track => track.stop()); // Stops the media stream tracks
+                stream.getTracks().forEach(track => track.stop());
                 console.log('Stream processing stopped.');
+                console.log("runTime: ", runTime);
+                console.log("runs: ", runs);
+                console.log("chunk time: ", runTime / runs);
             }
-           
-            chunkTime = audioContext.currentTime - startTime - prevChunkTime; //calculating how long this chunk has occured.
-           
+            }, expectedChunkTime * 1000); // e.g. 32ms = 0.032 * 1000
+            }
+
             
+           
      
 
 
@@ -631,10 +658,11 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
     let n = 0
     let m = 0;
     let alter = true;
-    let b = 0;
-    let sum = 0;
+    let runs = 0;
+    let runTime = 0;
     // Function to update the spectrogram
     function updateSpectrogram() {
+        runs++
         // Calculate the expected chunk index based on current playback time
         const elapsedTime = audioContext.currentTime - startTime;
         const expectedChunkIndex = Math.floor(elapsedTime / chunkDuration);
@@ -647,7 +675,6 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
         n++
         // Process and render all chunks up to the expected index -- ADD A TIME BASED CONSTRAINT
         while (currentChunkIndex <= expectedChunkIndex && currentChunkIndex < numChunks) { //If chunk processing is slower then expected and chunk index has not exceded total number of chunks
-
             const chunk = addZeroes(chunks[currentChunkIndex]); //Zero Padding
             m++
 
@@ -656,17 +683,22 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
 
             // magnitude select
             if (!isDB) {
-                const dataMagnitude = result.map(bin => bin.magnitude);
-                chosenValues = (dataMagnitude.slice(0, nFFT / 2));
-                /*const data = computeMagnitudeAndDB(result);
+                //const dataMagnitude = result.map(bin => bin.magnitude);
+                //chosenValues = (dataMagnitude.slice(0, nFFT / 2));
+                const data = computeMagnitudeAndDB(result);
                 const dataMagnitude = data.map(bin => bin.magnitude);
-                chosenValues = (dataMagnitude.slice(0, nFFT / 2));*/
+                chosenValues = (dataMagnitude.slice(0, nFFT / 2));
 
             } else {
                 const datadB = result.map(bin => bin.dB);
                 chosenValues = datadB.slice(0, nFFT / 2)
             }
- 
+            /*
+            if (b == 20) {
+                console.log(chunk)
+                filechunk = chunk;
+            }
+            b++;*/
             if (smoothOn) { // NOT TIME ON, gaussian smoothing
                 const smoothChosenValues = applyGaussianFilter(chosenValues, kernal)
 
@@ -686,9 +718,12 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
             requestAnimationFrame(updateSpectrogram);
         } else {
             filePlaying = null;
+            console.log("runTime: ", runTime);
+            console.log("runs: ", runs);
+
         }
 
-        prevTime = elapsedTime;
+        runTime = audioContext.currentTime - startTime;
 
     }
 
@@ -697,14 +732,17 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
     requestAnimationFrame(updateSpectrogram);
 
 }
-/*
-function computeMagnitudeAndDB(fftResult, REF = 1.0, useDB = true) {
+
+function computeMagnitudeAndDB(fftResult, REF, useDB) {
     return fftResult.map(({ real, imag }) => {
         const magnitude = Math.sqrt(real ** 2 + imag ** 2);
-        const dB = useDB ? 20 * Math.log10(magnitude / REF) : -Infinity;
+        let dB = 0;
+        if ((magnitude > 0) && (useDB)) {
+        dB = useDB ? 20 * Math.log10(magnitude / REF) : -100;
+        } 
         return { real, imag, magnitude, dB };
     });
-} */
+} 
 function normalise(values) { // this function works perfectly, BUT commented out because normalisation doesnt work when noise is only presented
     return values;
 
@@ -757,55 +795,47 @@ function applyGaussianFilter(chosenValues, kernal) { // Applying gaussian smooth
     return smoothedValues;
 }
 
-function fft(input) { 
+function fft(input, start = 0, stride = 1, N = input.length) {
+        if ((N & (N - 1)) !== 0) {
+            console.error("Input length must be a power of 2");
+            return [];
+        }
     
-    // My fft implentation, uses recursion to find the even and odd indexes, this breaks it into two
-    // however upon review i have a few ideas how to optimise this way better, as each recusion is doing so many 
-    // uncessasry calculations
-    const N = input.length; //Assume N is of size of power 2, ie (2^n = N)
-    if (N <= 1) return [{ real: input[0], imag: 0, magnitude: 0, dB: -Infinity }]; // mapping the output
-    if ((N & (N - 1)) !== 0) {
-        console.log(N)
-
-        console.log("Input array length must be a power of 2.");
-        return [];
+        // Base case
+        if (N === 1) {
+            return [{ real: input[start], imag: 0 }];
+        }
+    
+        // Recursive FFT on even and odd indices
+        const even = fft(input, start, stride * 2, N / 2);
+        const odd = fft(input, start + stride, stride * 2, N / 2);
+    
+        const combined = Array(N).fill(0).map(() => ({ real: 0, imag: 0 }));
+    
+        for (let k = 0; k < N / 2; k++) {
+            const angle = (-2 * Math.PI * k) / N;
+            const twiddle = {
+                real: Math.cos(angle),
+                imag: Math.sin(angle)
+            };
+    
+            const t = {
+                real: twiddle.real * odd[k].real - twiddle.imag * odd[k].imag,
+                imag: twiddle.real * odd[k].imag + twiddle.imag * odd[k].real
+            };
+    
+            combined[k] = {
+                real: even[k].real + t.real,
+                imag: even[k].imag + t.imag
+            };
+            combined[k + N / 2] = {
+                real: even[k].real - t.real,
+                imag: even[k].imag - t.imag
+            };
+        }
+    
+        return combined;
     }
-    //Split input into evens and odds then pass them back into function, untill size is 1
-    const even = fft(input.filter((_, i) => i % 2 === 0)); // even
-    const odd = fft(input.filter((_, i) => i % 2 !== 0)); // odd
-    let alt = 1;
-
-    const magnitude = Array(N)
-    const combined = Array(N).fill(0).map(() => ({ real: 0, imag: 0, magnitude: 0, dB: -Infinity }));
-
-    for (let k = 0; k < N/2; k++) { // N/2 as input has been halved into even and odds
-        const angle = (-2 * Math.PI * k) / (N);
-        const twiddle = complexExp(angle); // calculation the freq
-        
-        const t = {
-            real: twiddle.real * odd[k].real - twiddle.imag * odd[k].imag,
-            imag: twiddle.real * odd[k].imag + twiddle.imag * odd[k].real
-        }
-
-        combined[k] = {
-            real: even[k].real + t.real,
-            imag: even[k].imag + t.imag
-        }
-        combined[k + N / 2] = {
-            real: even[k].real - t.real,
-            imag: even[k].imag - t.imag
-        }
-        if (micOn) { alt = 1 }
-        combined[k].magnitude = Math.sqrt(combined[k].real ** 2 + combined[k].imag ** 2) / alt;
-        if (isDB) { combined[k].dB = 20 * Math.log10(combined[k].magnitude / REF); }  // DO THIS AFTER NOT EVERY ITERATION
- 
-        combined[k + N / 2].magnitude = Math.sqrt(combined[k + N / 2].real ** 2 + combined[k + N / 2].imag ** 2) / alt;
-        if (isDB) { combined[k + N / 2].dB = 20 * Math.log10(combined[k + N / 2].magnitude / REF); }
-        //magnitude[k] = Math.sqrt(combined[k].real ** 2 + combined[k].imag ** 2);
-    }
-    //console.log(Math.max(...combined.map(c => c.magnitude)));
-    return combined;
-} 
 function sliceIntoChunks(audioBuffer) {
     let tempOverlap = overlap;
 
@@ -1136,7 +1166,6 @@ function intensityToColor(intensity, maxValue, minValue) {
 
                 r = g = b = value;
             } else {
-                console.log("YES")
                 r = g = b = 255; // Default black if range is 0
             }
         } else if (chosenColourScheme == "neon") {
