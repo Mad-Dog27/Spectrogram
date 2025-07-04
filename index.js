@@ -106,7 +106,7 @@ let timeDiffs = []
 ctxSpectrum.imageSmoothingEnabled = true;
 //Global Constants
 let FRAMESIZE = 128; //time domain amount of samples taken
-let nFFT = 4096/2; //frequency domain amount zeroes and values aquired through fft
+let nFFT = 4096; //frequency domain amount zeroes and values aquired through fft
 let overlapPercent = 0.25;
 let overlap = Math.round(FRAMESIZE * overlapPercent);
 const SPEED = 1;
@@ -167,6 +167,16 @@ let filechunk = [];
 let micchunk = [];
 
 let intervalId = null;
+let n =1;
+let latestFrame = null; // or a ring buffer if you want to limit size
+let effectiveChunkSize = FRAMESIZE - overlap;
+
+let unregisteredUpdates = [];
+let totalunreg = [];
+let totalvals = [];
+
+const micWorker = new Worker('micWorker.js');
+const fftWorker = new Worker('fftWorker.js');
 // ---------------------------vvv- INTERRUPTS -vvv----------------------------------------
 
 //Adds an event listnener for the audioFileInput button, when the input file is changed the function will run after the file is changed.
@@ -295,6 +305,12 @@ contrastSlider.addEventListener('input', () => {
 
 //width slider, for width of spectrogram displayed
 widthSlider.addEventListener('input', () => {
+    n = widthSlider.value;
+    widthSliderValue.textContent = n; // Update the display
+    console.log(`Width: ${n}`);
+        intervalId = null;
+
+    /*
     WIDTH = widthSlider.value;
     canvasSpectrum.width = window.innerWidth * (WIDTH*3) - 2;  // 70% of screen width minus borders
 
@@ -302,7 +318,7 @@ widthSlider.addEventListener('input', () => {
     timeCanvasRelativeWidth = (timeCanvas.width + 2) * 3 - 2
     widthSliderValue.textContent = WIDTH; // Update the display
     console.log(`Width: ${WIDTH}`);
-
+    */
 });
 
 //sample frequcy slider input
@@ -347,6 +363,26 @@ playRecordButton.addEventListener('click', () => {
 })
 
 // -------------------------- INTERRUPTS DONE -----------------------------
+let animationID = null
+function renderSpectrogram() {
+    if (micOn){
+    animationID = requestAnimationFrame(renderSpectrogram);
+    if (unregisteredUpdates !== null) {
+        for (i = 0; i < unregisteredUpdates.length; i++) {
+
+            createMovingSpectrogram(unregisteredUpdates[i], effectiveChunkSize);
+            totalunreg.push([...unregisteredUpdates[i]])
+         
+        }
+           unregisteredUpdates = []; // Optional: avoid redrawing same frame
+    }
+    } else {cancelAnimationFrame(animationID);
+        console.log(totalunreg)
+        console.log(totalvals)
+        totalunreg = []
+        totalvals = []
+    }
+}
 
 
 
@@ -363,6 +399,7 @@ async function getMicData() {
     let ratio =  SAMPLEFREQ/  audioContext.sampleRate ; 
     let dataMagnitude, datadB;
     let prevChunkTime = 0;
+    renderSpectrogram();
 
     try {
         if (mel == null) { }//mel = melScale(); }
@@ -380,7 +417,7 @@ async function getMicData() {
         let prevTimeDomainBuffer = [];
      
         let chunkIndex = 0;
-        const effectiveChunkSize = FRAMESIZE - overlap; //Subracting overlap, as that portion of chunk is accounted for in the next
+        effectiveChunkSize = FRAMESIZE - overlap; //Subracting overlap, as that portion of chunk is accounted for in the next
         let closestFrameSize = FRAMESIZE;
         let neededFrameSize = FRAMESIZE / ratio;
         let closestNeededFrameSize = neededFrameSize;
@@ -390,10 +427,10 @@ async function getMicData() {
         let chunkTime = 0;
         // Function to process and visualize the microphone input 
         function processMicInput() {
-            runs++;
+            
             // check if current time is larger then the expected chunk time
             if (chunkTime >= expectedChunkTime) {
-                            console.log(chunkTime)
+                            //console.log(chunkTime)
 
             // calculate the closestneeded framesize (to the power of 2) to the users desired frame size,
             // this is used for resampling as, if lowereing Fs, more samples are needed to maintain same sized chunks
@@ -437,13 +474,15 @@ async function getMicData() {
                 closestFrameSize
             )
             let newTimeDomainBuffer = new Float32Array(FRAMESIZE) //adding overlap to the resampled buffer
-            
             newTimeDomainBuffer = addOverLap(resampledTimeDomainBuffer, prevTimeDomainBuffer, ratio, closestFrameSize);
             prevTimeDomainBuffer = resampledTimeDomainBuffer;
 
-
             const chunk = addZeroes(applyWindow(newTimeDomainBuffer, FRAMESIZE));//Applying a window AND zero padding, the function above defaults to rectangular window
+
             const result = fft(chunk); //FAST FOURIER TRANSFORM
+            
+            runs++;
+
             //magnitude selection 
             if (chosenMagnitudeScale == "magnitude") {
                 const data = computeMagnitudeAndDB(result, 1, false);
@@ -459,10 +498,14 @@ async function getMicData() {
 
                 chosenValues = datadB.slice(0, nFFT / 2)
             }
-           
+                                    let time1 = audioContext.currentTime;
+
+            unregisteredUpdates.push([...chosenValues]); // push a copy to avoid mutation
+            let time2 = audioContext.currentTime +1;
+            console.log("time ", (time2 - time1))
+            //createMovingSpectrogram(chosenValues)
             //createSpectrum(dataMagnitude);
-            createMovingSpectrogram(chosenValues, effectiveChunkSize);
-            prevChunkTime += chunkTime; //sum of all prev chunk times
+            //createMovingSpectrogram(chosenValues, effectiveChunkSize);
             if (recordOn) { //record mic input 
                 if (!storedBuffer[chunkIndex]) {
                     noOverlapBuffer[chunkIndex] = resampledTimeDomainBuffer;
@@ -473,9 +516,11 @@ async function getMicData() {
                 chunkIndex++;
             }
             }
-             runTime = audioContext.currentTime - startTime;
 
+            runTime = audioContext.currentTime - startTime;
             chunkTime = runTime - prevChunkTime; //calculating how long this chunk has occured.
+            prevChunkTime += chunkTime; //sum of all prev chunk times
+
             if (intervalId == null) {
              intervalId = setInterval(() => {
             if (micOn) {
@@ -490,9 +535,11 @@ async function getMicData() {
                 console.log('Stream processing stopped.');
                 console.log("runTime: ", runTime);
                 console.log("runs: ", runs);
-                console.log("chunk time: ", runTime / runs);
+                console.log("average chunk time: ", runTime / runs);
+                console.log("expected chunk time: ", expectedChunkTime);
+
             }
-            }, expectedChunkTime * 1000); // e.g. 32ms = 0.032 * 1000
+            }, expectedChunkTime * 1000 * n); // e.g. 32ms = 0.032 * 1000
             }
 
             
@@ -794,7 +841,7 @@ function applyGaussianFilter(chosenValues, kernal) { // Applying gaussian smooth
 
     return smoothedValues;
 }
-
+/*
 function fft(input, start = 0, stride = 1, N = input.length) {
         if ((N & (N - 1)) !== 0) {
             console.error("Input length must be a power of 2");
@@ -835,7 +882,71 @@ function fft(input, start = 0, stride = 1, N = input.length) {
         }
     
         return combined;
+    }*/
+   function bitReverseIndex(index, bits) {
+    let reversed = 0;
+    for (let i = 0; i < bits; i++) {
+        reversed <<= 1;
+        reversed |= index & 1;
+        index >>= 1;
     }
+    return reversed;
+}
+
+function fft(input) {
+    const N = input.length;
+    const levels = Math.log2(N);
+
+    if ((N & (N - 1)) !== 0) {
+        throw new Error("Input length must be a power of 2");
+    }
+
+    // Create output array of complex numbers
+    const output = new Array(N);
+    for (let i = 0; i < N; i++) {
+        const j = bitReverseIndex(i, levels);
+        output[i] = {
+            real: input[j],
+            imag: 0
+        };
+    }
+
+    for (let size = 2; size <= N; size <<= 1) {
+        const halfSize = size / 2;
+        const angleStep = (-2 * Math.PI) / size;
+
+        for (let i = 0; i < N; i += size) {
+            for (let j = 0; j < halfSize; j++) {
+                const even = output[i + j];
+                const odd = output[i + j + halfSize];
+
+                const angle = angleStep * j;
+                const twiddle = {
+                    real: Math.cos(angle),
+                    imag: Math.sin(angle)
+                };
+
+                const t = {
+                    real: twiddle.real * odd.real - twiddle.imag * odd.imag,
+                    imag: twiddle.real * odd.imag + twiddle.imag * odd.real
+                };
+
+                output[i + j] = {
+                    real: even.real + t.real,
+                    imag: even.imag + t.imag
+                };
+
+                output[i + j + halfSize] = {
+                    real: even.real - t.real,
+                    imag: even.imag - t.imag
+                };
+            }
+        }
+    }
+
+    return output;
+}
+
 function sliceIntoChunks(audioBuffer) {
     let tempOverlap = overlap;
 
@@ -987,7 +1098,7 @@ function timeGraph(chunk) {
 }
 
 // SPECTROGRAM DISPLAY FUNCTION
-function createMovingSpectrogram(X, effectiveChunkSize) {//Mic is having scaling issues because sample freq has no effect on it
+/*function createMovingSpectrogram(X, effectiveChunkSize) {//Mic is having scaling issues because sample freq has no effect on it
     let ratio = SAMPLEFREQ / 16000; // baseline of fs 16000, need a reference, however I am not too sure I like this - CHECK
     let barWidth = 1;
  
@@ -1042,16 +1153,65 @@ function createMovingSpectrogram(X, effectiveChunkSize) {//Mic is having scaling
             }
         })
 
+}
+}*/
+function createMovingSpectrogram(X, effectiveChunkSize) {
+    const fs = SAMPLEFREQ;
+    const barWidth = 2;
+    const height = canvasSpectrum.height;
+    const width = canvasSpectrum.width;
+    const nyquist = fs / 2;
+    const binHeight = height / (nFFT / 2);
+    const ratio = fs / 16000;
 
+    // Shift canvas to the left
+    ctxSpectrum.drawImage(canvasSpectrum, -barWidth, 0);
+    ctxSpectrum.clearRect(width - barWidth, 0, barWidth, height);
 
+    // Precompute max/min values once (could be passed in from FFT too)
+    let maxValue = -Infinity;
+    let minValue = Infinity;
+    for (let i = 0; i < X.length; i++) {
+        const val = X[i];
+        if (val > maxValue) maxValue = val;
+        if (val < minValue) minValue = val;
+    }
 
+    if (!melOn) {
+        // Linear frequency scale
+        const xCoord = width - barWidth;
 
+        for (let i = 0; i < X.length; i++) {
+            const intensity = X[i];
+            const y = height - (i / (nFFT / 2)) * height * ratio;
+            const h = binHeight * ratio;
+
+            ctxSpectrum.fillStyle = intensityToColor(intensity, maxValue, minValue);
+            ctxSpectrum.fillRect(xCoord, y, barWidth, h);
+        }
+    } else {
+        // MEL frequency scale
+        if (!melProcessed) {
+            mel = melScale();
+        }
+
+        const maxMel = 2595 * Math.log10(1 + nyquist / 700);
+        const xCoord = width - barWidth;
+
+        for (let i = 1; i < mel.length - 1; i++) {
+            const melY = height - mel[ratio * i];
+            const melHeight = mel[i + 1] - mel[i - 1]; // Local bandwidth approximation
+
+            ctxSpectrum.fillStyle = intensityToColor(X[i], maxValue, minValue);
+            ctxSpectrum.fillRect(xCoord, melY, barWidth, melHeight);
+        }
     }
 }
 
+
 // calculates the colour based off value magnitude -  Not a fan of how it calculates normVal
 function intensityToColor(intensity, maxValue, minValue) {
-    const noiseThreshold = 0.1; // Define a threshold for noise (adjust as needed)
+    const noiseThreshold = 0.01; // Define a threshold for noise (adjust as needed)
     const range = maxValue - minValue;
     let r, g, b;
     
