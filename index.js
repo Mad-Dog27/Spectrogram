@@ -33,7 +33,6 @@ NOTE: may crash your browser :) - Blame timeGraph() function - This is fixed
 
 
 
-const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 const optionWidth = "250px"
 //Button INputs for inputing Data
 const audioFileInput = document.getElementById('audioFileInput');
@@ -175,8 +174,8 @@ let unregisteredUpdates = [];
 let totalunreg = [];
 let totalvals = [];
 
-const micWorker = new Worker('micWorker.js');
-const fftWorker = new Worker('fftWorker.js');
+
+let toggle = false;
 // ---------------------------vvv- INTERRUPTS -vvv----------------------------------------
 
 //Adds an event listnener for the audioFileInput button, when the input file is changed the function will run after the file is changed.
@@ -194,9 +193,9 @@ audioFileInput.addEventListener('change', async (event) => { //AUDIO FILE INPUT
     processAudioBuffer(audioBuffer);
 });
 
-processAgainInput.addEventListener('click', () => {//  PROCCESS AGAIN
+ processAgainInput.addEventListener('click', () => {//  PROCCESS AGAIN
     //Event listener to process the audio file again, will happen on click
-    if (!fileUpload) { console.log("No input file selected"); return; }
+    /*if (!fileUpload) { console.log("No input file selected"); return; }
     if (filePlaying) { console.log("File is currently playing"); return; }
     if (micOn) { console.log("Mircophone Audio is currently playing"); return; }
     filePlaying = true;
@@ -208,7 +207,13 @@ processAgainInput.addEventListener('click', () => {//  PROCCESS AGAIN
     console.log(avg)
 
     console.log("proccessing again")
-    processAudioBuffer(audioBuffer);
+    processAudioBuffer(audioBuffer);*/
+    micWorker.terminate(); // if you're using one
+     audioContext.suspend(); // to pause
+// or
+ audioContext.close(); // to fully stop everything
+    toggle = true;
+
 
 })
 micButtonInput.addEventListener('click', () => {
@@ -363,6 +368,75 @@ playRecordButton.addEventListener('click', () => {
 })
 
 // -------------------------- INTERRUPTS DONE -----------------------------
+const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+
+const SAMPLE__RATE = 16000;
+const FRAME__SIZE = 1024;
+const DEVICESAMPLERATE = audioContext.sampleRate;
+
+const micWorker = new Worker('micWorker.js');
+const fftWorker = new Worker('fftWorker.js');
+
+micWorker.postMessage({ type: "config", sampleRate: SAMPLE__RATE,  deviceSampleRate: DEVICESAMPLERATE });
+micWorker.postMessage({ type: "config", deviceSampleRate: DEVICESAMPLERATE });
+
+let latestFFTData = [];
+
+// Handle FFT output for visualization
+fftWorker.onmessage = (e) => {
+  latestFFTData = e.data;
+};
+
+// Create spectrogram visualization loop
+function drawLoop() {
+  requestAnimationFrame(drawLoop);
+  if (latestFFTData.length > 0) {
+    createMovingSpectrogram(latestFFTData, FRAME_SIZE);
+  }
+}
+
+// Start drawing
+drawLoop();
+
+    async function startAudioPipeline() {
+  const audioContext = new AudioContext({ sampleRate: SAMPLE__RATE });
+    
+  // Load the AudioWorkletProcessor
+  await audioContext.audioWorklet.addModule('micProcessor.js');
+    console.log("ifje")
+
+  // Create mic input
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  const source = audioContext.createMediaStreamSource(stream);
+
+  // Create and connect audio worklet node
+  const micNode = new AudioWorkletNode(audioContext, 'mic-processor');
+  source.connect(micNode).connect(audioContext.destination); // destination is optional
+  // Handle mic data
+  micNode.port.onmessage = (e) => {
+  if (toggle) {
+    micNode.disconnect();
+    micNode.port.onmessage = null; 
+    return; // 
+  }
+
+  const chunk = e.data;
+  console.log(chunk);
+  micWorker.postMessage(chunk);
+};
+
+  // When mic worker finishes prepping audio frame
+  micWorker.onmessage = (e) => {
+    console.log(e.getFloatTimeDomainData)
+    fftWorker.postMessage(e.data, [e.data.buffer]);
+  };
+}
+
+startAudioPipeline().catch(console.error);
+
+
+
 let animationID = null
 function renderSpectrogram() {
     if (micOn){
