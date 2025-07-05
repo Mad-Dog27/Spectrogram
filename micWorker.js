@@ -8,6 +8,7 @@ The purpose of this worker function is to handle the raw mic audio, it will resa
 let DEVICE_SAMPLE_RATE = 16000;
 let SAMPLE_RATE = 16000;
 let FRAME_SIZE = 128;
+let PAUSED = false;
 let CAPTURE_SIZE = 128;
 let ratio =  SAMPLE_RATE/DEVICE_SAMPLE_RATE;
 let lowerPower = 1;
@@ -30,7 +31,12 @@ onmessage = function (e) {
     DEVICE_SAMPLE_RATE = e.data.deviceSampleRate;
     updateRequiredFrameSize();
 
-    } else {  
+    } else if (e.data.type === "pause") {
+        PAUSED = e.data.paused;
+    } else { 
+    if (!PAUSED) {
+    let start1 = performance.now();
+
     let i = 0;   
     let prevTime = 0;
     let startTime = performance.now();
@@ -50,8 +56,11 @@ onmessage = function (e) {
     resampledAudioChunk = resampleMicBuffer(newAudioChunk);
  
   newAudioChunk.set(0)
+    let start2 = performance.now();
+    //console.log("Sampling time: ", start2 - start1)
     postMessage(resampledAudioChunk, [resampledAudioChunk.buffer]); // Pass along to next stage (fftWorker)
     }
+}
 };
 
 function appendBuffer(buffer1, buffer2) {

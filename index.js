@@ -176,6 +176,8 @@ let totalvals = [];
 
 
 let toggle = false;
+let threadedMicOn = false;
+let singleThreadMicOn = false;
 // ---------------------------vvv- INTERRUPTS -vvv----------------------------------------
 
 //Adds an event listnener for the audioFileInput button, when the input file is changed the function will run after the file is changed.
@@ -194,31 +196,31 @@ audioFileInput.addEventListener('change', async (event) => { //AUDIO FILE INPUT
 });
 
  processAgainInput.addEventListener('click', () => {//  PROCCESS AGAIN
-    //Event listener to process the audio file again, will happen on click
-    /*if (!fileUpload) { console.log("No input file selected"); return; }
-    if (filePlaying) { console.log("File is currently playing"); return; }
-    if (micOn) { console.log("Mircophone Audio is currently playing"); return; }
-    filePlaying = true;
-    let sum = 0;
-    for (let i = 0; i < timeDiffs.length; i++) {
-        sum += timeDiffs[i]
-    }
-    const avg = sum / timeDiffs.length
-    console.log(avg)
+   
+    if (threadedMicOn) {
+        threadedMicOn = false;
+        audioContext.suspend();//Pause the audiocontext from capturing data
+        //micWorker.terminate(); 
+        toggle = true;
+        micWorker.postMessage({ type: "paused", paused: PAUSED});
+        micWorker.postMessage({ type: "config", sampleRate: SAMPLE__RATE,  deviceSampleRate: DEVICESAMPLERATE });
 
-    console.log("proccessing again")
-    processAudioBuffer(audioBuffer);*/
-    micWorker.terminate(); // if you're using one
-     audioContext.suspend(); // to pause
-// or
- audioContext.close(); // to fully stop everything
-    toggle = true;
-    fftWorker.terminate();
+        //fftWorker.terminate();
+        return;
+    } else if (singleThreadMicOn) {console.log("Single Thread Microphone is in use"); return;} 
+        
+        threadedMicOn = true;
+        toggle = false;
+        micWorker.postMessage({ type: "paused", paused: PAUSED});
 
+        drawLoop();
+        startAudioPipeline().catch(console.error);
+        
+    
 })
 micButtonInput.addEventListener('click', () => {
     //Event listener for Microphone input button, occurs on click, button acts as a toggle 
-    if (filePlaying) { console.log("File Audio is currently playing"); return; }
+    if (threadedMicOn) { console.log("Multi Threaded Microphone is in use"); return; }
     if (micOn) { // If mic already on, toggle off, NOTE: There is a better way to toggle, EDIT LATER
         micOn = false;
         audioContext.suspend();//Pause the audiocontext from capturing data
@@ -373,59 +375,61 @@ const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
 const SAMPLE__RATE = 16000;
 const FRAME__SIZE = 1024;
+let PAUSED = false
 const DEVICESAMPLERATE = audioContext.sampleRate;
 
 const micWorker = new Worker('micWorker.js');
 const fftWorker = new Worker('fftWorker.js');
 
 micWorker.postMessage({ type: "config", sampleRate: SAMPLE__RATE,  deviceSampleRate: DEVICESAMPLERATE });
-micWorker.postMessage({ type: "config", deviceSampleRate: DEVICESAMPLERATE });
 
 let latestFFTData = new Float32Array(nFFT);
 let fftResult = []
-// Handle FFT output for visualization
 fftWorker.onmessage = (e) => {
-  const data = e.data;
-    fftResult = []
-    for (let i = 0; i < data.length; i += 2) {
-    fftResult.push({ real: data[i], imag: data[i + 1] });
+    start1 = performance.now();
+  const data = e.data; // Float32Array of [real, imag, real, imag, ...]
+
+  const len = data.length / 2;
+  const magnitudes = new Float32Array(len);
+
+  for (let i = 0; i < len; i++) {
+    const real = data[i * 2];
+    const imag = data[i * 2 + 1];
+    magnitudes[i] = Math.sqrt(real * real + imag * imag);
   }
-
-    const computedResult = computeMagnitudeAndDB(fftResult, 1, false);
-
-    const resultMagnitude = computedResult.map(bin => bin.magnitude);
-    chosenValues = (resultMagnitude.slice(0, nFFT / 2));
-
-    latestFFTData = chosenValues
-    fftResult = 0
+  start2 = performance.now()
+  //console.log("Display time: ", start2-start1)
+  latestFFTData = magnitudes.subarray(0, nFFT / 2); // Use only half for display
 };
+
 
 // Create spectrogram visualization loop
 function drawLoop() {
     if (!toggle){
   requestAnimationFrame(drawLoop);
   if (latestFFTData.length > 0) {
-    createMovingSpectrogram(latestFFTData, FRAMESIZE);
-  }}
+for (let i = 0; i < 2; i++) {
+      createMovingSpectrogram(latestFFTData, FRAMESIZE);
+    }  }}
 }
 
 // Start drawing
-drawLoop();
+//drawLoop();
 
-    async function startAudioPipeline() {
-  const audioContext = new AudioContext({ sampleRate: SAMPLE__RATE });
+async function startAudioPipeline() {
+    const audioContext = new AudioContext({ sampleRate: SAMPLE__RATE });
     
-  // Load the AudioWorkletProcessor
-  await audioContext.audioWorklet.addModule('micProcessor.js');
+    // Load the AudioWorkletProcessor
+    await audioContext.audioWorklet.addModule('micProcessor.js');
     console.log("ifje")
 
-  // Create mic input
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  const source = audioContext.createMediaStreamSource(stream);
+    // Create mic input
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const source = audioContext.createMediaStreamSource(stream);
 
-  // Create and connect audio worklet node
-  const micNode = new AudioWorkletNode(audioContext, 'mic-processor');
-  source.connect(micNode).connect(audioContext.destination); // destination is optional
+    // Create and connect audio worklet node
+    const micNode = new AudioWorkletNode(audioContext, 'mic-processor');
+    source.connect(micNode).connect(audioContext.destination); // destination is optional
   
   // Handle mic data
   micNode.port.onmessage = (e) => {
@@ -445,7 +449,7 @@ drawLoop();
   };
 }
 
-startAudioPipeline().catch(console.error);
+//startAudioPipeline().catch(console.error);
 
 
 

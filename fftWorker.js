@@ -34,6 +34,8 @@ onmessage = function (e) {
     if (e.data.type == "config"){
 
     } else {
+           let start1 = performance.now();
+
         currentBuffer = new Float32Array(e.data);
         const overlappedBuffer = addOverLap();
         const preparedChunk = addZeroes(applyWindow(overlappedBuffer, FRAME_SIZE));
@@ -45,6 +47,8 @@ onmessage = function (e) {
             flattened[i * 2]     = fftOutput[i].real;
             flattened[i * 2 + 1] = fftOutput[i].imag;
         }
+        let start2 = performance.now();
+        //console.log("fft time: ", start2 - start1)
         postMessage(flattened, [flattened.buffer]); // Pass along to next stage (fftWorker)
 
     }   
