@@ -10,7 +10,6 @@ let SAMPLE_RATE = 16000;
 let FRAME_SIZE = 128;
 let CAPTURE_SIZE = 128;
 let ratio =  SAMPLE_RATE/DEVICE_SAMPLE_RATE;
-console.log("frf", ratio)
 let lowerPower = 1;
 let higherPower = 1;
 let closestFrameSize = FRAME_SIZE;
@@ -32,16 +31,14 @@ onmessage = function (e) {
     updateRequiredFrameSize();
 
     } else {  
-        console.log(e.data)
     let i = 0;   
     let prevTime = 0;
     let startTime = performance.now();
     let timePassed=0;
     while (i < ratio) {
         if (timePassed > expectedChunkTime) {
-            const audioChunk = new Float32Array(e.data); // You’ll receive mic frames like this
+            const audioChunk = new Float32Array(e.data); 
             newAudioChunk = appendBuffer(audioChunk, newAudioChunk)
-            console.log("requiredAudioCh: ", audioChunk,newAudioChunk)
             i++;
             timePassed = 0;
             prevTime = 0;
@@ -50,10 +47,8 @@ onmessage = function (e) {
         prevTime = thisIterationTime;
         timePassed += thisIterationTime;
     }
-    console.log(newAudioChunk)
     resampledAudioChunk = resampleMicBuffer(newAudioChunk);
-  // Optionally: resample, frame, overlap (you’ll add this later)
-  // When done, forward to FFT worker
+ 
   newAudioChunk.set(0)
     postMessage(resampledAudioChunk, [resampledAudioChunk.buffer]); // Pass along to next stage (fftWorker)
     }

@@ -213,7 +213,7 @@ audioFileInput.addEventListener('change', async (event) => { //AUDIO FILE INPUT
 // or
  audioContext.close(); // to fully stop everything
     toggle = true;
-
+    fftWorker.terminate();
 
 })
 micButtonInput.addEventListener('click', () => {
@@ -381,19 +381,32 @@ const fftWorker = new Worker('fftWorker.js');
 micWorker.postMessage({ type: "config", sampleRate: SAMPLE__RATE,  deviceSampleRate: DEVICESAMPLERATE });
 micWorker.postMessage({ type: "config", deviceSampleRate: DEVICESAMPLERATE });
 
-let latestFFTData = [];
-
+let latestFFTData = new Float32Array(nFFT);
+let fftResult = []
 // Handle FFT output for visualization
 fftWorker.onmessage = (e) => {
-  latestFFTData = e.data;
+  const data = e.data;
+    fftResult = []
+    for (let i = 0; i < data.length; i += 2) {
+    fftResult.push({ real: data[i], imag: data[i + 1] });
+  }
+
+    const computedResult = computeMagnitudeAndDB(fftResult, 1, false);
+
+    const resultMagnitude = computedResult.map(bin => bin.magnitude);
+    chosenValues = (resultMagnitude.slice(0, nFFT / 2));
+
+    latestFFTData = chosenValues
+    fftResult = 0
 };
 
 // Create spectrogram visualization loop
 function drawLoop() {
+    if (!toggle){
   requestAnimationFrame(drawLoop);
   if (latestFFTData.length > 0) {
-    createMovingSpectrogram(latestFFTData, FRAME_SIZE);
-  }
+    createMovingSpectrogram(latestFFTData, FRAMESIZE);
+  }}
 }
 
 // Start drawing
@@ -413,6 +426,7 @@ drawLoop();
   // Create and connect audio worklet node
   const micNode = new AudioWorkletNode(audioContext, 'mic-processor');
   source.connect(micNode).connect(audioContext.destination); // destination is optional
+  
   // Handle mic data
   micNode.port.onmessage = (e) => {
   if (toggle) {
@@ -422,13 +436,11 @@ drawLoop();
   }
 
   const chunk = e.data;
-  console.log(chunk);
   micWorker.postMessage(chunk);
 };
 
   // When mic worker finishes prepping audio frame
   micWorker.onmessage = (e) => {
-    console.log(e.getFloatTimeDomainData)
     fftWorker.postMessage(e.data, [e.data.buffer]);
   };
 }
@@ -548,7 +560,7 @@ async function getMicData() {
                 closestFrameSize
             )
             let newTimeDomainBuffer = new Float32Array(FRAMESIZE) //adding overlap to the resampled buffer
-            newTimeDomainBuffer = addOverLap(resampledTimeDomainBuffer, prevTimeDomainBuffer, ratio, closestFrameSize);
+            newTimeDomainBuffer = addOverLap(resampledTimeDomainBuffer, prevTimeDomainBuffer);
             prevTimeDomainBuffer = resampledTimeDomainBuffer;
 
             const chunk = addZeroes(applyWindow(newTimeDomainBuffer, FRAMESIZE));//Applying a window AND zero padding, the function above defaults to rectangular window
@@ -632,7 +644,7 @@ async function getMicData() {
 }
 
 // addoverlap to a buffer using the previous buffer
-function addOverLap(timeDomainBuffer, prevTimeDomainBuffer, ratio, closestFrameSize) { //WRONG OVERLAP SHOUDLNT INCREASE FRAMESIZE
+function addOverLap(timeDomainBuffer, prevTimeDomainBuffer) { //WRONG OVERLAP SHOUDLNT INCREASE FRAMESIZE
     
     const prevLength = prevTimeDomainBuffer.length;
     //new overlap in terms of samples
