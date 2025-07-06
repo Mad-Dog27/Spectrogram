@@ -5,7 +5,7 @@ The purpose of this worker function is to handle the raw mic audio, it will resa
 
 */
 
-let DEVICE_SAMPLE_RATE = 16000;
+let DEVICE_SAMPLE_RATE = 48000;
 let SAMPLE_RATE = 16000;
 let FRAME_SIZE = 128;
 let PAUSED = false;
@@ -29,9 +29,11 @@ onmessage = function (e) {
     if (e.data.type === "config") {
     SAMPLE_RATE = e.data.sampleRate;
     DEVICE_SAMPLE_RATE = e.data.deviceSampleRate;
+    FRAME_SIZE = e.data.frame_size
+    neededFrameSize = FRAME_SIZE / ratio;
     updateRequiredFrameSize();
 
-    } else if (e.data.type === "pause") {
+    } else if (e.data.type === "paused") {
         PAUSED = e.data.paused;
     } else { 
     if (!PAUSED) {
@@ -41,10 +43,16 @@ onmessage = function (e) {
     let prevTime = 0;
     let startTime = performance.now();
     let timePassed=0;
-    while (i < ratio) {
+    let frameRatio = closestNeededFrameSize/(e.data.length);
+    
+
+    while (i <= frameRatio) {
         if (timePassed > expectedChunkTime) {
             const audioChunk = new Float32Array(e.data); 
-            newAudioChunk = appendBuffer(audioChunk, newAudioChunk)
+            if (i > 1){
+                newAudioChunk = appendBuffer(audioChunk, newAudioChunk)
+            } else {
+                newAudioChunk = audioChunk;}
             i++;
             timePassed = 0;
             prevTime = 0;
@@ -54,9 +62,11 @@ onmessage = function (e) {
         timePassed += thisIterationTime;
     }
     resampledAudioChunk = resampleMicBuffer(newAudioChunk);
- 
+    newAudioChunk = new Float32Array(CAPTURE_SIZE)
   newAudioChunk.set(0)
     let start2 = performance.now();
+
+
     //console.log("Sampling time: ", start2 - start1)
     postMessage(resampledAudioChunk, [resampledAudioChunk.buffer]); // Pass along to next stage (fftWorker)
     }
@@ -84,7 +94,6 @@ function updateRequiredFrameSize() {
             closestFrameSize = higherPower;
             //analyser.fftSize = closestNeededFrameSize; 
             
-
             if (closestFrameSize > NFFT) { 
                 NFFT = closestFrameSize * 2; //frequency domain amount zeroes and values aquired through fft
             }
@@ -99,7 +108,7 @@ function resampleMicBuffer(buffer) {//This works
     if (DEVICE_SAMPLE_RATE == SAMPLE_RATE) { return buffer; } // if no resampling needed
     for (let i = 0; i < FRAME_SIZE; i++) { //newLength should be buffers original size(desired size)
         // by grabbing every ratio sample, means sample freq is lowered by ratio
-        let index = i * ratio;
+        let index = i / ratio;
         let lowerIndex = Math.floor(index);
         let upperIndex = Math.ceil(index);
         let fraction = index - lowerIndex; // if not a clean ratio, ie decimal
@@ -110,6 +119,6 @@ function resampleMicBuffer(buffer) {//This works
             newBuffer[i] = buffer[lowerIndex]; // Edge case handling
         }
     }
-    
+    console.log(newBuffer)
     return newBuffer;
 }

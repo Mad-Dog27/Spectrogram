@@ -203,7 +203,7 @@ audioFileInput.addEventListener('change', async (event) => { //AUDIO FILE INPUT
         //micWorker.terminate(); 
         toggle = true;
         micWorker.postMessage({ type: "paused", paused: PAUSED});
-        micWorker.postMessage({ type: "config", sampleRate: SAMPLE__RATE,  deviceSampleRate: DEVICESAMPLERATE });
+        fftWorker.postMessage({ type: "paused", paused: PAUSED});
 
         //fftWorker.terminate();
         return;
@@ -212,6 +212,7 @@ audioFileInput.addEventListener('change', async (event) => { //AUDIO FILE INPUT
         threadedMicOn = true;
         toggle = false;
         micWorker.postMessage({ type: "paused", paused: PAUSED});
+        fftWorker.postMessage({ type: "paused", paused: PAUSED});
 
         drawLoop();
         startAudioPipeline().catch(console.error);
@@ -291,6 +292,10 @@ frameSizeSlider.addEventListener('input', () => {
     intervalId = null;
     //nFFT = FRAMESIZE * 2; //frequency domain amount zeroes and values aquired through fft
     overlap = Math.round(FRAMESIZE * overlapPercent);
+    FRAME__SIZE = FRAMESIZE
+micWorker.postMessage({ type: "config", sampleRate: SAMPLE__RATE,  deviceSampleRate: DEVICESAMPLERATE, frame_size: FRAME__SIZE });
+fftWorker.postMessage({ type: "config", sampleRate: SAMPLE__RATE,  deviceSampleRate: DEVICESAMPLERATE, frame_size: FRAME__SIZE });
+
 })
 //reference input for dB
 refSlider.addEventListener('input', () => {
@@ -341,6 +346,9 @@ sampleFreqSlider.addEventListener('input', () => {//Function to update the INput
     intervalId = null;
     console.log(`FS: ${SAMPLEFREQ}`);
         console.log(expectedChunkTime)
+        SAMPLE__RATE = SAMPLEFREQ
+    micWorker.postMessage({ type: "config", sampleRate: SAMPLE__RATE,  deviceSampleRate: DEVICESAMPLERATE, frame_size: FRAME__SIZE });
+fftWorker.postMessage({ type: "config", sampleRate: SAMPLE__RATE,  deviceSampleRate: DEVICESAMPLERATE, frame_size: FRAME__SIZE });
 
 });
 // overlap input
@@ -373,22 +381,22 @@ playRecordButton.addEventListener('click', () => {
 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
 
-const SAMPLE__RATE = 16000;
-const FRAME__SIZE = 1024;
+let SAMPLE__RATE = 16000;
+let FRAME__SIZE = 128;
 let PAUSED = false
 const DEVICESAMPLERATE = audioContext.sampleRate;
 
 const micWorker = new Worker('micWorker.js');
 const fftWorker = new Worker('fftWorker.js');
 
-micWorker.postMessage({ type: "config", sampleRate: SAMPLE__RATE,  deviceSampleRate: DEVICESAMPLERATE });
+micWorker.postMessage({ type: "config", sampleRate: SAMPLE__RATE,  deviceSampleRate: DEVICESAMPLERATE, frame_size: FRAME__SIZE });
 
 let latestFFTData = new Float32Array(nFFT);
 let fftResult = []
 fftWorker.onmessage = (e) => {
     start1 = performance.now();
   const data = e.data; // Float32Array of [real, imag, real, imag, ...]
-
+/*
   const len = data.length / 2;
   const magnitudes = new Float32Array(len);
 
@@ -396,23 +404,42 @@ fftWorker.onmessage = (e) => {
     const real = data[i * 2];
     const imag = data[i * 2 + 1];
     magnitudes[i] = Math.sqrt(real * real + imag * imag);
-  }
+  }*/
   start2 = performance.now()
   //console.log("Display time: ", start2-start1)
-  latestFFTData = magnitudes.subarray(0, nFFT / 2); // Use only half for display
+  latestFFTData = data;
 };
 
-
+let g = 0;
 // Create spectrogram visualization loop
 function drawLoop() {
     if (!toggle){
+        
   requestAnimationFrame(drawLoop);
   if (latestFFTData.length > 0) {
+      if (g == 1000){
+        downloadAsTextFile("this", latestFFTData)
+        console.log("YESSSSSSSSSSSSSSSSSSSSS")
+        }
+        console.log(g)
+        g++;
 for (let i = 0; i < 2; i++) {
-      createMovingSpectrogram(latestFFTData, FRAMESIZE);
+      createMovingSpectrogram(latestFFTData);
     }  }}
 }
+function downloadAsTextFile(filename, dataArray) {
+    const text = dataArray.join('\n'); // turn array into newline-separated string
+    const blob = new Blob([text], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
 
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+
+    // Clean up
+    URL.revokeObjectURL(url);
+}
 // Start drawing
 //drawLoop();
 
@@ -460,7 +487,7 @@ function renderSpectrogram() {
     if (unregisteredUpdates !== null) {
         for (i = 0; i < unregisteredUpdates.length; i++) {
 
-            createMovingSpectrogram(unregisteredUpdates[i], effectiveChunkSize);
+            createMovingSpectrogram(unregisteredUpdates[i]);
             totalunreg.push([...unregisteredUpdates[i]])
          
         }
@@ -840,11 +867,11 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
                 const smoothChosenValues = applyGaussianFilter(chosenValues, kernal)
 
                 //createSpectrum(chosenValues);
-                createMovingSpectrogram(smoothChosenValues, effectiveChunkSize);
+                createMovingSpectrogram(smoothChosenValues);
 
             } else { // normal display
                 //createSpectrum(chosenValues);
-                createMovingSpectrogram(chosenValues, effectiveChunkSize);
+                createMovingSpectrogram(chosenValues);
             }
             currentChunkIndex++; //incrementing chunk index
             
@@ -1245,13 +1272,19 @@ function timeGraph(chunk) {
 
 }
 }*/
-function createMovingSpectrogram(X, effectiveChunkSize) {
+let globalMax = 0.001;
+let globalMin = 0;
+
+// Inside your draw/update loop:
+
+
+function createMovingSpectrogram(X) {
     const fs = SAMPLEFREQ;
     const barWidth = 2;
     const height = canvasSpectrum.height;
     const width = canvasSpectrum.width;
     const nyquist = fs / 2;
-    const binHeight = height / (nFFT / 2);
+    const binHeight = height / (nFFT / 1);
     const ratio = fs / 16000;
 
     // Shift canvas to the left
@@ -1266,7 +1299,8 @@ function createMovingSpectrogram(X, effectiveChunkSize) {
         if (val > maxValue) maxValue = val;
         if (val < minValue) minValue = val;
     }
-
+        globalMax = Math.max(globalMax * 0.99, maxValue); // slow decay
+        globalMin = Math.min(globalMin * 1.01, minValue); // slow decay
     if (!melOn) {
         // Linear frequency scale
         const xCoord = width - barWidth;
@@ -1276,7 +1310,7 @@ function createMovingSpectrogram(X, effectiveChunkSize) {
             const y = height - (i / (nFFT / 2)) * height * ratio;
             const h = binHeight * ratio;
 
-            ctxSpectrum.fillStyle = intensityToColor(intensity, maxValue, minValue);
+            ctxSpectrum.fillStyle = intensityToColor(intensity, globalMax, globalMin);
             ctxSpectrum.fillRect(xCoord, y, barWidth, h);
         }
     } else {
