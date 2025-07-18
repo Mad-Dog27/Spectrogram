@@ -19,7 +19,7 @@ let NFFT = 4096
 let expectedChunkTime = CAPTURE_SIZE/16000
 
 let newAudioChunk = new Float32Array(128)
-let totalAudioChunk = new Float32Array(128)
+let totalAudioChunk = null;
 
 
 let KERNEL = generateLowPassKernel(SAMPLE_RATE/2, DEVICE_SAMPLE_RATE, 101)
@@ -36,6 +36,7 @@ onmessage = function (e) {
     ratio =  SAMPLE_RATE/DEVICE_SAMPLE_RATE;
     
     neededFrameSize = FRAME_SIZE / ratio;
+    KERNEL = generateLowPassKernel(SAMPLE_RATE/2, DEVICE_SAMPLE_RATE, 101)
     updateRequiredFrameSize();
     
             console.log("hugo")
@@ -45,26 +46,31 @@ onmessage = function (e) {
         PAUSED = e.data.paused;
     } else { 
         if (!PAUSED) {
+        
+            let audioChunk = e.data
 
-        let audioChunk = e.data
-        newAudioChunk = appendBuffer(audioChunk, newAudioChunk);
-        console.log(newAudioChunk)
+            if (newAudioChunk == null) {
+               newAudioChunk = audioChunk
+               return
+            }
+            newAudioChunk = appendBuffer(newAudioChunk, audioChunk);
+            console.log(newAudioChunk)
 
-        if (newAudioChunk.length >= neededFrameSize) {
-            totalAudioChunk = newAudioChunk.slice(0, neededFrameSize)
-        postMessage(totalAudioChunk); // Pass along to next stage (fftWorker)
-        newAudioChunk = new Float32Array(128)
-        totalAudioChunk = new Float32Array(128)
+            if (newAudioChunk.length >= neededFrameSize) {
+                totalAudioChunk = newAudioChunk.slice(0, neededFrameSize)
+                newAudioChunk = null;
+                //let filteredChunk = applyFIRFilter(totalAudioChunk, KERNEL)
+                //let resampledAudioChunk = downsample(filteredChunk, 3)
+                //let resampledAudioChunk = resampleMicBuffer(filteredChunk);
+                let thunk = totalAudioChunk;
+                postMessage(thunk, [thunk.buffer]); // Pass along to next stage (fftWorker)
+
+                totalAudioChunk = null;
                 console.log(newAudioChunk)
 
-    } else {return;} 
+             } else {return;} 
       
-    //filteredChunk = applyFIRFilter(totalAudioChunk, KERNEL)
-
-    //resampledAudioChunk = resampleMicBuffer(filteredChunk);
-    //resampledAudioChunk = downsample(filteredChunk,1/ratio)
-    //newAudioChunk = new Float32Array(CAPTURE_SIZE)
-  //newAudioChunk.set(0)
+    
     let start2 = performance.now();
     //postMessage({ type: "print", currentBuffer});
 

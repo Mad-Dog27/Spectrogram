@@ -265,6 +265,8 @@ smoothButtonInput.addEventListener('click', () => {
 //magnitude select input
 magnitudeSelect.addEventListener('change', (event) => {
     //Changing the window value, between Rectangular, hamming and blackman-harris
+    globalMax = -10
+    globalMin = 10
     chosenMagnitudeScale = event.target.value;
     console.log(`Window function selected: ${chosenMagnitudeScale}`);
     if (chosenMagnitudeScale == "deciBels") { isDB = true; }
@@ -394,24 +396,31 @@ micWorker.postMessage({ type: "config", sampleRate: SAMPLE__RATE,  deviceSampleR
 let latestFFTData = new Float32Array(nFFT);
 let fftResult = []
 let printme = null;
+let printme2 = null
 fftWorker.onmessage = (e) => {
     if (e.data.type === "print"){
         printme = new Float32Array(e.data.currentBuffer);
+        console.log(printme)
         const chunk = addZeroes(applyWindow(printme, FRAMESIZE));//Applying a window AND zero padding, the function above defaults to rectangular window
 
         thisChunk = fft(chunk).slice(0, chunk.length / 2);
-        let magnitudes = new Float32Array(thisChunk.length);
+        //let magnitudes = new Float32Array(thisChunk.length);
+         if (chosenMagnitudeScale == "magnitude") {
+                const data = computeMagnitudeAndDB(thisChunk, 1, false);
+                let dataMagnitude = data.map(bin => bin.magnitude);
+                chosenValues = dataMagnitude.slice(0, nFFT / 2);
+                
+            } else {
+                const data = computeMagnitudeAndDB(thisChunk, 1, true);
+                let datadB = data.map(bin => bin.dB);
+                chosenValues = datadB.slice(0, nFFT / 2)
+            }
+        
+        printme2 = chosenValues
+        console.log(chosenValues)
+      createMovingSpectrogram(chosenValues);
 
-        for (let i = 0; i < thisChunk.length; i++) {
-        const real = thisChunk[i].real;
-        const imag = thisChunk[i].imag;
-         magnitudes[i] = Math.sqrt(real * real + imag * imag);
-        }
-      
-        console.log(magnitudes)
-      createMovingSpectrogram(magnitudes);
-
-        createSpectrum(magnitudes)
+        createSpectrum(chosenValues)
 
     } else {
     start1 = performance.now();
@@ -439,8 +448,8 @@ function drawLoop() {
         
   requestAnimationFrame(drawLoop);
   if (latestFFTData.length > 0) {
-      if (g == 1000){
-        downloadAsTextFile("this", printme)
+      if (g == 10000){
+        downloadAsTextFile("this", printme2)
         console.log("YESSSSSSSSSSSSSSSSSSSSS")
         const chunk = addZeroes(applyWindow(printme, FRAMESIZE));//Applying a window AND zero padding, the function above defaults to rectangular window
 
@@ -1323,8 +1332,8 @@ function createMovingSpectrogram(X) {
     ctxSpectrum.clearRect(width - barWidth, 0, barWidth, height);
 
     // Precompute max/min values once (could be passed in from FFT too)
-    let maxValue = -Infinity;
-    let minValue = Infinity;
+    let maxValue = -10;
+    let minValue = 10;
     for (let i = 0; i < X.length; i++) {
         const val = X[i];
         if (val > maxValue) maxValue = val;
@@ -1332,6 +1341,8 @@ function createMovingSpectrogram(X) {
     }
         globalMax = Math.max(globalMax * 0.99, maxValue); // slow decay
         globalMin = Math.min(globalMin * 1.01, minValue); // slow decay
+        globalMax = 20
+       console.log(globalMax)
     if (!melOn) {
         // Linear frequency scale
         const xCoord = width - barWidth;
@@ -1366,8 +1377,8 @@ function createMovingSpectrogram(X) {
 
 // calculates the colour based off value magnitude -  Not a fan of how it calculates normVal
 function intensityToColor(intensity, maxValue, minValue) {
-    const noiseThreshold = 0.01; // Define a threshold for noise (adjust as needed)
-    const range = maxValue - minValue;
+    const noiseThreshold = 0.001; // Define a threshold for noise (adjust as needed)
+    const range = Math.max(maxValue - minValue, 1e-6);
     let r, g, b;
     
     // Ensure the range is valid, avoid dividing by zero
@@ -1380,11 +1391,12 @@ function intensityToColor(intensity, maxValue, minValue) {
             normValue = 0; // Treat very small values as noise
         } else {
             normValue = (intensity - minValue) / range;
-            normValue = Math.max(0, Math.min(normValue, 1)); // Clamp to [0, 1]
+            //normValue = Math.max(0, Math.min(normValue, 1)); // Clamp to [0, 1]
+            //r, g, b = normValue;
         }
 
 
-        const value = Math.floor((1 - intensity) * 255); // Map 0-1 to 0-255
+        const value = Math.floor((1 - normValue) * 255); // Map 0-1 to 0-255
         if (chosenColourScheme == "greyScale") {
             // Map normalized intensity to grayscale
             r = value;
