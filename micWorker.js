@@ -11,16 +11,15 @@ let FRAME_SIZE = 128;
 let PAUSED = false;
 let CAPTURE_SIZE = 128;
 let ratio =  SAMPLE_RATE/DEVICE_SAMPLE_RATE;
-let lowerPower = 1;
-let higherPower = 1;
+
 let closestFrameSize = FRAME_SIZE;
 let neededFrameSize = FRAME_SIZE / ratio;
 let closestNeededFrameSize = neededFrameSize;
 let NFFT = 4096
-let expectedChunkTime = CAPTURE_SIZE/SAMPLE_RATE
+let expectedChunkTime = CAPTURE_SIZE/16000
 let newAudioChunk = new Float32Array(128)
 
-
+let KERNEL = generateLowPassKernel(SAMPLE_RATE/2, DEVICE_SAMPLE_RATE, 101)
 updateRequiredFrameSize();
 
 
@@ -30,8 +29,14 @@ onmessage = function (e) {
     SAMPLE_RATE = e.data.sampleRate;
     DEVICE_SAMPLE_RATE = e.data.deviceSampleRate;
     FRAME_SIZE = e.data.frame_size
+    closestFrameSize = FRAME_SIZE;
+    ratio =  SAMPLE_RATE/DEVICE_SAMPLE_RATE;
+    
     neededFrameSize = FRAME_SIZE / ratio;
     updateRequiredFrameSize();
+    
+            console.log("hugo")
+
 
     } else if (e.data.type === "paused") {
         PAUSED = e.data.paused;
@@ -43,16 +48,22 @@ onmessage = function (e) {
     let prevTime = 0;
     let startTime = performance.now();
     let timePassed=0;
-    let frameRatio = closestNeededFrameSize/(e.data.length);
-    
+    let frameRatio = neededFrameSize/(e.data.length);
+    let totalAudioChunk = newAudioChunk;
+        console.log(frameRatio)
+                console.log(closestNeededFrameSize)
+                    console.log(neededFrameSize)
+                console.log(closestFrameSize)
 
-    while (i <= frameRatio) {
+    while (i < Math.ceil(frameRatio)) {
         if (timePassed > expectedChunkTime) {
             const audioChunk = new Float32Array(e.data); 
-            if (i > 1){
-                newAudioChunk = appendBuffer(audioChunk, newAudioChunk)
+            if (i == 0){
+                totalAudioChunk = audioChunk;
+                
             } else {
-                newAudioChunk = audioChunk;}
+                totalAudioChunk = appendBuffer(audioChunk, totalAudioChunk);
+               }
             i++;
             timePassed = 0;
             prevTime = 0;
@@ -61,10 +72,16 @@ onmessage = function (e) {
         prevTime = thisIterationTime;
         timePassed += thisIterationTime;
     }
-    resampledAudioChunk = resampleMicBuffer(newAudioChunk);
-    newAudioChunk = new Float32Array(CAPTURE_SIZE)
-  newAudioChunk.set(0)
+    console.log(totalAudioChunk)
+    filteredChunk = applyFIRFilter(totalAudioChunk, KERNEL)
+    console.log(filteredChunk)
+
+    //resampledAudioChunk = resampleMicBuffer(filteredChunk);
+    resampledAudioChunk = downsample(filteredChunk,1/ratio)
+    //newAudioChunk = new Float32Array(CAPTURE_SIZE)
+  //newAudioChunk.set(0)
     let start2 = performance.now();
+    //postMessage({ type: "print", currentBuffer});
 
 
     //console.log("Sampling time: ", start2 - start1)
@@ -81,6 +98,8 @@ function appendBuffer(buffer1, buffer2) {
 }
 
 function updateRequiredFrameSize() {
+            let lowerPower = 1;
+            let higherPower = 1;    
             while (lowerPower * 2 < neededFrameSize) { lowerPower <<= 1; }
             higherPower = lowerPower * 2;
             lowerPower >>= 1;
@@ -102,7 +121,7 @@ function updateRequiredFrameSize() {
 function resampleMicBuffer(buffer) {//This works
     //Buffer is going to be ratio times larger then need be, this is becuase of interpolation, lower freqs skip a certain
     // amount of samples, but still needs to be same size, therefore original bufffer needs to be larger
-
+    //console.log(buffer)
     //const ratio = DEVICE_SAMPLE_RATE / SAMPLE_RATE; // deviceFS / sampleFREQ (user chosen)
     let newBuffer = new Float32Array(FRAME_SIZE);
     if (DEVICE_SAMPLE_RATE == SAMPLE_RATE) { return buffer; } // if no resampling needed
@@ -112,13 +131,63 @@ function resampleMicBuffer(buffer) {//This works
         let lowerIndex = Math.floor(index);
         let upperIndex = Math.ceil(index);
         let fraction = index - lowerIndex; // if not a clean ratio, ie decimal
-
         if (upperIndex < buffer.length) { //Interpulation (if needed)
             newBuffer[i] = buffer[lowerIndex] * (1 - fraction) + buffer[upperIndex] * fraction; // Linear interpolation
         } else {
             newBuffer[i] = buffer[lowerIndex]; // Edge case handling
         }
     }
-    console.log(newBuffer)
+    //console.log(newBuffer[newBuffer.length-1])
     return newBuffer;
+}
+
+
+function generateLowPassKernel(cutoffFreq, sampleRate, kernelSize) {
+    const kernel = new Float32Array(kernelSize);
+    const fc = cutoffFreq / sampleRate; // normalized cutoff (0 < fc < 0.5)
+    const M = kernelSize - 1;
+    const PI = Math.PI;
+
+    for (let n = 0; n < kernelSize; n++) {
+        if (n === M / 2) {
+            kernel[n] = 2 * fc;
+        } else {
+            const x = n - M / 2;
+            kernel[n] = Math.sin(2 * PI * fc * x) / (PI * x);
+        }
+
+        // Apply Hamming window
+        kernel[n] *= 0.54 - 0.46 * Math.cos((2 * PI * n) / M);
+    }
+
+    return kernel;
+}
+
+function applyFIRFilter(input, kernel) {
+    const output = new Float32Array(input.length);
+    const half = Math.floor(kernel.length / 2);
+
+    for (let i = 0; i < input.length; i++) {
+        let acc = 0;
+        for (let j = 0; j < kernel.length; j++) {
+            const idx = i - j + half;
+            if (idx >= 0 && idx < input.length) {
+                acc += input[idx] * kernel[j];
+            }
+        }
+        output[i] = acc;
+    }
+
+    return output;
+}
+
+function downsample(input, factor) {
+    const outputLength = Math.floor(input.length / factor);
+    const output = new Float32Array(outputLength);
+
+    for (let i = 0; i < outputLength; i++) {
+        output[i] = input[i * factor];
+    }
+
+    return output;
 }

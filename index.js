@@ -393,7 +393,27 @@ micWorker.postMessage({ type: "config", sampleRate: SAMPLE__RATE,  deviceSampleR
 
 let latestFFTData = new Float32Array(nFFT);
 let fftResult = []
+let printme = null;
 fftWorker.onmessage = (e) => {
+    if (e.data.type === "print"){
+        printme = new Float32Array(e.data.currentBuffer);
+        const chunk = addZeroes(applyWindow(printme, FRAMESIZE));//Applying a window AND zero padding, the function above defaults to rectangular window
+
+        thisChunk = fft(chunk).slice(0, chunk.length / 2);
+        let magnitudes = new Float32Array(thisChunk.length);
+
+        for (let i = 0; i < thisChunk.length; i++) {
+        const real = thisChunk[i].real;
+        const imag = thisChunk[i].imag;
+         magnitudes[i] = Math.sqrt(real * real + imag * imag);
+        }
+      
+        console.log(magnitudes)
+      createMovingSpectrogram(magnitudes);
+
+        createSpectrum(magnitudes)
+
+    } else {
     start1 = performance.now();
   const data = e.data; // Float32Array of [real, imag, real, imag, ...]
 /*
@@ -408,23 +428,39 @@ fftWorker.onmessage = (e) => {
   start2 = performance.now()
   //console.log("Display time: ", start2-start1)
   latestFFTData = data;
+}
 };
 
 let g = 0;
 // Create spectrogram visualization loop
+let thisChunk = null;
 function drawLoop() {
     if (!toggle){
         
   requestAnimationFrame(drawLoop);
   if (latestFFTData.length > 0) {
       if (g == 1000){
-        downloadAsTextFile("this", latestFFTData)
+        downloadAsTextFile("this", printme)
         console.log("YESSSSSSSSSSSSSSSSSSSSS")
+        const chunk = addZeroes(applyWindow(printme, FRAMESIZE));//Applying a window AND zero padding, the function above defaults to rectangular window
+
+        thisChunk = fft(chunk)
+
+        let magnitudes = new Float32Array(thisChunk.length);
+
+        for (let i = 0; i < thisChunk.length; i++) {
+        const real = thisChunk[i].real;
+        const imag = thisChunk[i].imag;
+         magnitudes[i] = 10*Math.sqrt(real * real + imag * imag);
         }
-        console.log(g)
+        createSpectrum(magnitudes)
+        console.log(magnitudes)
+        }
         g++;
 for (let i = 0; i < 2; i++) {
-      createMovingSpectrogram(latestFFTData);
+            //console.log(latestFFTData)
+
+      //createMovingSpectrogram(latestFFTData);
     }  }}
 }
 function downloadAsTextFile(filename, dataArray) {
@@ -546,7 +582,7 @@ async function getMicData() {
         function processMicInput() {
             
             // check if current time is larger then the expected chunk time
-            if (chunkTime >= expectedChunkTime) {
+            if ((3*chunkTime) >= expectedChunkTime) {
                             //console.log(chunkTime)
 
             // calculate the closestneeded framesize (to the power of 2) to the users desired frame size,
@@ -619,9 +655,11 @@ async function getMicData() {
 
             unregisteredUpdates.push([...chosenValues]); // push a copy to avoid mutation
             let time2 = audioContext.currentTime +1;
-            console.log("time ", (time2 - time1))
             //createMovingSpectrogram(chosenValues)
-            //createSpectrum(dataMagnitude);
+
+            createSpectrum(chosenValues);
+            console.log(dataMagnitude)
+
             //createMovingSpectrogram(chosenValues, effectiveChunkSize);
             if (recordOn) { //record mic input 
                 if (!storedBuffer[chunkIndex]) {
@@ -1010,6 +1048,7 @@ function fft(input, start = 0, stride = 1, N = input.length) {
     return reversed;
 }
 
+
 function fft(input) {
     const N = input.length;
     const levels = Math.log2(N);
@@ -1153,23 +1192,15 @@ function createSpectrum(X) {
     const barWidth = canvas2D.width / K; // Width of each bar in the spectrum
     let freq = 0;
     // Normalize the magnitude values to fit the canvas height
-    for (let i = 0; i < K / 2; i++) {
-        //const freq = samplingFreq * (1 / K) * i; // Frequency (scaled for display purposes)
+   const maxFreq = 8000;
+for (let i = 0; i < X.length; i++) {
+  const freq = i * 16000 / (2 * X.length); // or: sampleRate * i / fftSize
+  const x = (freq / maxFreq) * canvas2D.width; // scaled to canvas
 
-        const value = 9 * X[i] // Normalized magnitude
+  const value = X[i] * 9;
+  ctx2D.fillRect(x, canvas2D.height - value, 2, value);
+}
 
-
-        // Use some color mapping for visualization
-        const red = Math.min(255, value * 10);
-        const green = Math.min(255, 255 - value * 5);
-        const blue = Math.min(255, value * 2);
-        ctx2D.fillStyle = `rgb(${red}, ${green}, ${blue})`;
-
-        // Draw the bar
-        ctx2D.fillRect(2 * freq, canvas2D.height - value, 2 * barWidth, value);
-        //ctx2D.fillRect(canvas2.width - barWidth, 0, barWidth, canvas2.height)
-        freq += barWidth;
-    }
 
 }
 
@@ -1285,7 +1316,7 @@ function createMovingSpectrogram(X) {
     const width = canvasSpectrum.width;
     const nyquist = fs / 2;
     const binHeight = height / (nFFT / 1);
-    const ratio = fs / 16000;
+    const ratio = fs/16000;
 
     // Shift canvas to the left
     ctxSpectrum.drawImage(canvasSpectrum, -barWidth, 0);

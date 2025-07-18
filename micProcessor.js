@@ -7,7 +7,8 @@ class MicProcessor extends AudioWorkletProcessor {
   process(inputs, outputs, parameters) {
     const input = inputs[0]; // [channel][sample array]
     if (input.length > 0 && input[0].length > 0) {
-      this.port.postMessage(input[0]); // Send raw mic samples to main thread
+    const buffer = new Float32Array(input[0]);
+    this.port.postMessage(buffer, [buffer.buffer]);
     }
     return true; // Keep processor alive
   }

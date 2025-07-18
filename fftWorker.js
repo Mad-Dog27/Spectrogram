@@ -23,7 +23,7 @@ let newAudioChunk = new Float32Array(FRAME_SIZE)
 let currentBuffer = new Float32Array(FRAME_SIZE)
 let prevBuffer = new Float32Array(FRAME_SIZE)
 
-let overlapPercent = 0.25;
+let overlapPercent = 0;
 let overlap = Math.round(FRAME_SIZE * overlapPercent);
 let PAUSED = false;
 
@@ -41,24 +41,23 @@ onmessage = function (e) {
     }else {
         
         if (!PAUSED) {
+            /*
            let start1 = performance.now();
         if (e.data.length*2 > NFFT) {NFFT = e.data.length*2}
 
         currentBuffer = new Float32Array(e.data);
-        console.log(currentBuffer)
-        const overlappedBuffer = addOverLap();
-                console.log(overlappedBuffer)
 
-        const preparedChunk = addZeroes(applyWindow(overlappedBuffer, FRAME_SIZE));
+        //console.log(currentBuffer)
+        const overlappedBuffer = addOverLap();
+                //console.log(overlappedBuffer)
+        //console.log(e.data)
+        console.log(currentBuffer)
+        const preparedChunk = addZeroes(applyWindow(currentBuffer, FRAME_SIZE));
+        console.log(preparedChunk)
+
         const fftOutput = fft(preparedChunk)
-        const halfLength = Math.floor(fftOutput.length / 2);
-        //const halfFFT = fftOutput.slice(0, halfLength);
-        //const flattened = new Float32Array(halfFFT.length * 2); // real + imag
-            /*
-        for (let i = 0; i < halfFFT.length; i++) {
-            flattened[i * 2]     = halfFFT[i].real;
-            flattened[i * 2 + 1] = halfFFT[i].imag;
-        }*/
+        //console.log(e.data)
+       
         const len = fftOutput.length;
         const magnitudes = new Float32Array(len);
 
@@ -67,11 +66,17 @@ onmessage = function (e) {
         const imag = fftOutput[i].imag;
         magnitudes[i] = Math.sqrt(real * real + imag * imag);
         }
-      
+
         let start2 = performance.now();
+        postMessage({ type: "print", magnitudes});
+
         //console.log("fft time: ", start2 - start1)
         postMessage(magnitudes, [magnitudes.buffer]); // Pass along to next stage (fftWorker)
+            */
+                   currentBuffer = new Float32Array(e.data);
+        postMessage({ type: "print", currentBuffer});
 
+        postMessage(currentBuffer, [currentBuffer.buffer]);
     }   
 }
 };
@@ -90,21 +95,22 @@ function addZeroes(frame) { // add zeroes to match nFFT value
 
     return paddedFrame;
 }
-function applyWindow(chunk, frameLength) {
+function applyWindow(unwindowChunk, frameLength) {
+    let chunk = new Float32Array(frameLength)
     if (chosenWindow == "rectangular") { // no change
         return chunk;
     }
 
     if (chosenWindow == "hamming") {
         for (let n = 0; n < frameLength; n++) {
-            chunk[n] = chunk[n] * (0.54 - 0.46 * Math.cos((2 * Math.PI * n) / (frameLength - 1)));
+            chunk[n] = unwindowChunk[n] * (0.54 - 0.46 * Math.cos((2 * Math.PI * n) / (frameLength - 1)));
         }
 
 
     }
     if (chosenWindow == "blackman Harris") {
         for (let n = 0; n < frameLength; n++) {
-            chunk[n] = chunk[n] * (0.35875 - 0.48829 * Math.cos((2 * Math.PI * n) / (frameLength - 1)) +
+            chunk[n] = unwindowChunk[n] * (0.35875 - 0.48829 * Math.cos((2 * Math.PI * n) / (frameLength - 1)) +
                 0.14128 * Math.cos((4 * Math.PI * n) / (frameLength - 1)) -
                 0.01168 * Math.cos((6 * Math.PI * n) / (frameLength - 1)));
         }
@@ -115,6 +121,7 @@ function applyWindow(chunk, frameLength) {
 }
 // addoverlap to a buffer using the previous buffer
 function addOverLap() {
+    if (overlap > 0) {
     const safeCurrent = new Float32Array(currentBuffer); // full copy
     const safePrev = new Float32Array(prevBuffer);       // full copy
 
@@ -130,10 +137,7 @@ function addOverLap() {
   prevLength = safePrev.length
   currentLength = safeCurrent.length
   if (prevLength < currentLength) {
-    console.log("PREV LE: ", prevLength)
     newOverlap = prevLength 
-    console.log("PREV LE: ", newOverlap)
-
   }
 
   // Copy overlap from end of previous buffer to start of new buffer
@@ -153,6 +157,8 @@ function addOverLap() {
     prevBuffer = newCurrentBuffer.slice();
 
   return newCurrentBuffer;
+}
+return currentBuffer
 }
 
 
