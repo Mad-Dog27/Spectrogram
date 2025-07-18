@@ -17,7 +17,10 @@ let neededFrameSize = FRAME_SIZE / ratio;
 let closestNeededFrameSize = neededFrameSize;
 let NFFT = 4096
 let expectedChunkTime = CAPTURE_SIZE/16000
+
 let newAudioChunk = new Float32Array(128)
+let totalAudioChunk = new Float32Array(128)
+
 
 let KERNEL = generateLowPassKernel(SAMPLE_RATE/2, DEVICE_SAMPLE_RATE, 101)
 updateRequiredFrameSize();
@@ -41,43 +44,25 @@ onmessage = function (e) {
     } else if (e.data.type === "paused") {
         PAUSED = e.data.paused;
     } else { 
-    if (!PAUSED) {
-    let start1 = performance.now();
+        if (!PAUSED) {
 
-    let i = 0;   
-    let prevTime = 0;
-    let startTime = performance.now();
-    let timePassed=0;
-    let frameRatio = neededFrameSize/(e.data.length);
-    let totalAudioChunk = newAudioChunk;
-        console.log(frameRatio)
-                console.log(closestNeededFrameSize)
-                    console.log(neededFrameSize)
-                console.log(closestFrameSize)
+        let audioChunk = e.data
+        newAudioChunk = appendBuffer(audioChunk, newAudioChunk);
+        console.log(newAudioChunk)
 
-    while (i < Math.ceil(frameRatio)) {
-        if (timePassed > expectedChunkTime) {
-            const audioChunk = new Float32Array(e.data); 
-            if (i == 0){
-                totalAudioChunk = audioChunk;
-                
-            } else {
-                totalAudioChunk = appendBuffer(audioChunk, totalAudioChunk);
-               }
-            i++;
-            timePassed = 0;
-            prevTime = 0;
-        }
-        thisIterationTime = performance.now() - startTime - prevTime; 
-        prevTime = thisIterationTime;
-        timePassed += thisIterationTime;
-    }
-    console.log(totalAudioChunk)
-    filteredChunk = applyFIRFilter(totalAudioChunk, KERNEL)
-    console.log(filteredChunk)
+        if (newAudioChunk.length >= neededFrameSize) {
+            totalAudioChunk = newAudioChunk.slice(0, neededFrameSize)
+        postMessage(totalAudioChunk); // Pass along to next stage (fftWorker)
+        newAudioChunk = new Float32Array(128)
+        totalAudioChunk = new Float32Array(128)
+                console.log(newAudioChunk)
+
+    } else {return;} 
+      
+    //filteredChunk = applyFIRFilter(totalAudioChunk, KERNEL)
 
     //resampledAudioChunk = resampleMicBuffer(filteredChunk);
-    resampledAudioChunk = downsample(filteredChunk,1/ratio)
+    //resampledAudioChunk = downsample(filteredChunk,1/ratio)
     //newAudioChunk = new Float32Array(CAPTURE_SIZE)
   //newAudioChunk.set(0)
     let start2 = performance.now();
@@ -85,7 +70,6 @@ onmessage = function (e) {
 
 
     //console.log("Sampling time: ", start2 - start1)
-    postMessage(resampledAudioChunk, [resampledAudioChunk.buffer]); // Pass along to next stage (fftWorker)
     }
 }
 };
