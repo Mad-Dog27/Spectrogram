@@ -34,7 +34,7 @@ onmessage = function (e) {
     FRAME_SIZE = e.data.frame_size
     closestFrameSize = FRAME_SIZE;
     ratio =  SAMPLE_RATE/DEVICE_SAMPLE_RATE;
-    
+    console.log(ratio)
     neededFrameSize = FRAME_SIZE / ratio;
     KERNEL = generateLowPassKernel(SAMPLE_RATE/2, DEVICE_SAMPLE_RATE, 101)
     updateRequiredFrameSize();
@@ -57,11 +57,12 @@ onmessage = function (e) {
             if (newAudioChunk.length >= neededFrameSize) {
                 totalAudioChunk = newAudioChunk.slice(0, neededFrameSize)
                 newAudioChunk = null;
-                if (SAMPLE_RATE != DEVICE_SAMPLE_RATE) {
+                if (SAMPLE_RATE == DEVICE_SAMPLE_RATE) {
                 let filteredChunk = applyFIRFilter(totalAudioChunk, KERNEL)
                 //let resampledAudioChunk = downsample(filteredChunk, 3)
                 let resampledAudioChunk = resampleMicBuffer(filteredChunk);
                     chosenChunk = resampledAudioChunk;
+                    console.log("RESAMPLED")
                 } else {
                     chosenChunk = totalAudioChunk;
                 }
@@ -116,7 +117,9 @@ function resampleMicBuffer(buffer) {//This works
     //console.log(buffer)
     //const ratio = DEVICE_SAMPLE_RATE / SAMPLE_RATE; // deviceFS / sampleFREQ (user chosen)
     let newBuffer = new Float32Array(FRAME_SIZE);
-    if (DEVICE_SAMPLE_RATE == SAMPLE_RATE) { return buffer; } // if no resampling needed
+    if (DEVICE_SAMPLE_RATE == SAMPLE_RATE) { 
+        console.log("NOPE")
+        return buffer; } // if no resampling needed
     for (let i = 0; i < FRAME_SIZE; i++) { //newLength should be buffers original size(desired size)
         // by grabbing every ratio sample, means sample freq is lowered by ratio
         let index = i / ratio;
