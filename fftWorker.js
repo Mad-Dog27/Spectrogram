@@ -36,6 +36,7 @@ onmessage = function (e) {
         SAMPLE_RATE = e.data.sampleRate;
         DEVICE_SAMPLE_RATE = e.data.deviceSampleRate;
         FRAME_SIZE = e.data.frame_size
+        console.log(FRAME_SIZE)
     } else if (e.data.type === "paused") {
         PAUSED = e.data.paused;
     }else {

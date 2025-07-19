@@ -53,7 +53,7 @@ onmessage = function (e) {
                return
             }
             newAudioChunk = appendBuffer(newAudioChunk, audioChunk);
-
+            console.log(neededFrameSize)
             if (newAudioChunk.length >= neededFrameSize) {
                 totalAudioChunk = newAudioChunk.slice(0, neededFrameSize)
                 newAudioChunk = null;
@@ -62,13 +62,14 @@ onmessage = function (e) {
                 //let resampledAudioChunk = downsample(filteredChunk, 3)
                 let resampledAudioChunk = resampleMicBuffer(filteredChunk);
                     chosenChunk = resampledAudioChunk;
+                                       console.log(chosenChunk)
+
                     console.log("RESAMPLED")
                 } else {
                     chosenChunk = totalAudioChunk;
                 }
                 let thunk = totalAudioChunk
                 postMessage(chosenChunk, [chosenChunk.buffer]); // Pass along to next stage (fftWorker)
-                   
                 totalAudioChunk = null;
 
              } else {return;} 

@@ -1341,7 +1341,7 @@ function createMovingSpectrogram(X) {
 
 // calculates the colour based off value magnitude -  Not a fan of how it calculates normVal
 function intensityToColor(intensity, maxValue, minValue) {
-    const noiseThreshold = 0.001; // Define a threshold for noise (adjust as needed)
+    const noiseThreshold = 0.0001; // Define a threshold for noise (adjust as needed)
     const range = Math.max(maxValue - minValue, 1e-6);
     let r, g, b;
     
