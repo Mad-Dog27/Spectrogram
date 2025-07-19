@@ -28,7 +28,7 @@ let overlap = Math.round(FRAME_SIZE * overlapPercent);
 let PAUSED = false;
 
 let chosenWindow = "blackman Harris"// rectangular, hamming, blackman Harris
-
+let chosenMagnitudeScale = "magnitude"
 
 // Called when main thread sends audio chunks
 onmessage = function (e) {
@@ -41,6 +41,25 @@ onmessage = function (e) {
     }else {
         
         if (!PAUSED) {
+            let chosenValues;
+            currentBuffer = new Float32Array(e.data);
+            const chunk = addZeroes(applyWindow(currentBuffer, FRAME_SIZE));//Applying a window AND zero padding, the function above defaults to rectangular window
+
+            const thisChunk = fft(chunk)
+        //let magnitudes = new Float32Array(thisChunk.length);
+            if (chosenMagnitudeScale == "magnitude") {
+                const data = computeMagnitudeAndDB(thisChunk, 1, false);
+                let dataMagnitude = data.map(bin => bin.magnitude);
+                chosenValues = dataMagnitude.slice(0, NFFT / 2);
+                
+            } else {
+                const data = computeMagnitudeAndDB(thisChunk, 1, true);
+                let datadB = data.map(bin => bin.dB);
+                chosenValues = datadB.slice(0, NFFT / 2)
+            }
+            let fftOutput = new Float32Array(chosenValues)
+                        console.log(fftOutput)
+
             /*
            let start1 = performance.now();
         if (e.data.length*2 > NFFT) {NFFT = e.data.length*2}
@@ -73,10 +92,10 @@ onmessage = function (e) {
         //console.log("fft time: ", start2 - start1)
         postMessage(magnitudes, [magnitudes.buffer]); // Pass along to next stage (fftWorker)
             */
-                   currentBuffer = new Float32Array(e.data);
-        postMessage({ type: "print", currentBuffer});
+                   //urrentBuffer = new Float32Array(e.data);
+        //postMessage({ type: "print", chosenValues});
 
-        postMessage(currentBuffer, [currentBuffer.buffer]);
+        postMessage(fftOutput, [fftOutput.buffer]);
     }   
 }
 };
@@ -225,3 +244,13 @@ function fft(input) {
 
     return output;
 }
+function computeMagnitudeAndDB(fftResult, REF, useDB) {
+    return fftResult.map(({ real, imag }) => {
+        const magnitude = Math.sqrt(real ** 2 + imag ** 2);
+        let dB = 0;
+        if ((magnitude > 0) && (useDB)) {
+        dB = useDB ? 20 * Math.log10(magnitude / REF) : -100;
+        } 
+        return { real, imag, magnitude, dB };
+    });
+} 
