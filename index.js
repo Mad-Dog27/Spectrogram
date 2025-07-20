@@ -77,11 +77,11 @@ const powerSliderValue = document.getElementById('powerSliderValue')
 const contrastSlider = document.getElementById("contrastSlider")
 const contrastSliderValue = document.getElementById('contrastSliderValue')
 
-
+/*
 const widthSlider = document.getElementById('widthSlider');
 widthSlider.style.width = optionWidth;
 const widthSliderValue = document.getElementById('widthSliderValue');
-
+*/
 const sampleFreqSlider = document.getElementById('sampleFreqSlider');
 sampleFreqSlider.style.width = optionWidth;
 const sampleFreqSliderValue = document.getElementById('sampleFreqSliderValue');
@@ -318,13 +318,14 @@ contrastSlider.addEventListener('input', () => {
 })
 
 //width slider, for width of spectrogram displayed
+/*
 widthSlider.addEventListener('input', () => {
     n = widthSlider.value;
     widthSliderValue.textContent = n; // Update the display
     console.log(`Width: ${n}`);
         intervalId = null;
 
-    /*
+    
     WIDTH = widthSlider.value;
     canvasSpectrum.width = window.innerWidth * (WIDTH*3) - 2;  // 70% of screen width minus borders
 
@@ -332,8 +333,8 @@ widthSlider.addEventListener('input', () => {
     timeCanvasRelativeWidth = (timeCanvas.width + 2) * 3 - 2
     widthSliderValue.textContent = WIDTH; // Update the display
     console.log(`Width: ${WIDTH}`);
-    */
-});
+    
+});*/
 
 //sample frequcy slider input
 sampleFreqSlider.addEventListener('input', () => {//Function to update the INputed Sampling freq, this will improved freqeuency resolution but only untill you reach the original inputed frequency
@@ -654,7 +655,7 @@ async function getMicData() {
             //createMovingSpectrogram(chosenValues)
 
             createSpectrum(chosenValues);
-            console.log(dataMagnitude)
+            timeGraph(resampledTimeDomainBuffer)
 
             //createMovingSpectrogram(chosenValues, effectiveChunkSize);
             if (recordOn) { //record mic input 

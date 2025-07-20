@@ -85,3 +85,16 @@
     display: flex;
     gap: 10px;
 }
+
+body {
+  background: #f7f7f7;
+  font-family: 'Inter', sans-serif;
+  color: #222;
+}
+
+.panel {
+  background: white;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
