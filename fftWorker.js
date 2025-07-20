@@ -36,7 +36,6 @@ onmessage = function (e) {
         SAMPLE_RATE = e.data.sampleRate;
         DEVICE_SAMPLE_RATE = e.data.deviceSampleRate;
         FRAME_SIZE = e.data.frame_size
-        console.log(FRAME_SIZE)
     } else if (e.data.type === "paused") {
         PAUSED = e.data.paused;
     }else {
@@ -59,7 +58,6 @@ onmessage = function (e) {
                 chosenValues = datadB.slice(0, NFFT / 2)
             }
             let fftOutput = new Float32Array(chosenValues)
-                        console.log(fftOutput)
 
             /*
            let start1 = performance.now();
@@ -95,8 +93,9 @@ onmessage = function (e) {
             */
                    //urrentBuffer = new Float32Array(e.data);
         //postMessage({ type: "print", chosenValues});
+        //postMessage({ type: "print", currentBuffer});
 
-        postMessage(fftOutput, [fftOutput.buffer]);
+       postMessage(fftOutput, [fftOutput.buffer]);
     }   
 }
 };
@@ -162,7 +161,6 @@ function addOverLap() {
 
   // Copy overlap from end of previous buffer to start of new buffer
   newCurrentBuffer.set(safePrev.slice(safePrev.length - newOverlap), 0);
-  console.log(newCurrentBuffer)
 
   // Copy new audio into rest
   newCurrentBuffer.set(safeCurrent.slice(0, FRAME_SIZE - newOverlap), newOverlap);

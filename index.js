@@ -387,16 +387,25 @@ let SAMPLE__RATE = 16000;
 let FRAME__SIZE = 128;
 let PAUSED = false
 const DEVICESAMPLERATE = audioContext.sampleRate;
-
+console.log(DEVICESAMPLERATE)
 const micWorker = new Worker('micWorker.js');
 const fftWorker = new Worker('fftWorker.js');
 
 micWorker.postMessage({ type: "config", sampleRate: SAMPLE__RATE,  deviceSampleRate: DEVICESAMPLERATE, frame_size: FRAME__SIZE });
 
 let latestFFTData = new Float32Array(nFFT);
-
+let chunk = new Float32Array(FRAMESIZE);
 fftWorker.onmessage = (e) => {
     if (e.data.type === "print"){
+        chunk = e.data.currentBuffer
+        console.log(chunk)
+        let fftchunk = fft(addZeroes(applyWindow(chunk, FRAMESIZE)))
+        let data = computeMagnitudeAndDB(fftchunk, 1, false);
+        let dataMagnitude = data.map(bin => bin.magnitude);
+        let chosenValues = dataMagnitude.slice(0, nFFT / 2);
+
+        console.log(chosenValues)
+        createSpectrum(chosenValues)
     } else {
     latestFFTData = e.data
     console.log(latestFFTData)
@@ -411,10 +420,9 @@ function drawLoop() {
         
         requestAnimationFrame(drawLoop);
         if (latestFFTData.length > 0) {
-            if (g == 10000){
-                downloadAsTextFile("this", printme2)
-                console.log("YESSSSSSSSSSSSSSSSSSSSS")
-                const chunk = addZeroes(applyWindow(printme, FRAMESIZE));//Applying a window AND zero padding, the function above defaults to rectangular window
+            if (g == 100){
+                downloadAsTextFile("this", latestFFTData)
+                const chunk = addZeroes(applyWindow(latestFFTData, FRAMESIZE));//Applying a window AND zero padding, the function above defaults to rectangular window
 
                 thisChunk = fft(chunk)
 
@@ -429,7 +437,7 @@ function drawLoop() {
                 createMovingSpectrogram(latestFFTData);
 
             }
-                    
+                  
             for (let i = 0; i < 2; i++) {
                 createSpectrum(latestFFTData)
                 createMovingSpectrogram(latestFFTData);
@@ -455,7 +463,7 @@ function downloadAsTextFile(filename, dataArray) {
 //drawLoop();
 
 async function startAudioPipeline() {
-    const audioContext = new AudioContext({ sampleRate: SAMPLE__RATE });
+    const audioContext = new AudioContext({ sampleRate: 48000 });
     
     // Load the AudioWorkletProcessor
     await audioContext.audioWorklet.addModule('micProcessor.js');
@@ -745,6 +753,7 @@ function resampleMicBuffer(buffer, originalRate, targetRate, closestFrameSize) {
     if (originalRate == targetRate) { return buffer; } // if no resampling needed
     for (let i = 0; i < FRAMESIZE; i++) { //newLength should be buffers original size(desired size)
         // by grabbing every ratio sample, means sample freq is lowered by ratio
+        console.log("REAMPLE")
         let index = i * ratio;
         let lowerIndex = Math.floor(index);
         let upperIndex = Math.ceil(index);
@@ -1286,12 +1295,12 @@ let globalMin = 0;
 
 function createMovingSpectrogram(X) {
     const fs = SAMPLEFREQ;
-    const barWidth = 2;
+    const barWidth = 1;
     const height = canvasSpectrum.height;
     const width = canvasSpectrum.width;
     const nyquist = fs / 2;
     const binHeight = height / (nFFT / 2);
-    const ratio =fs/16000;
+    const ratio =1//fs/16000;
 
     // Shift canvas to the left
     ctxSpectrum.drawImage(canvasSpectrum, -barWidth, 0);
@@ -1315,7 +1324,7 @@ function createMovingSpectrogram(X) {
             const intensity = X[i];
             const y = height - (i / (nFFT / 2)) * height * ratio;
             const h = binHeight * ratio;
-
+            //if ()
             ctxSpectrum.fillStyle = intensityToColor(intensity, globalMax, globalMin);
             ctxSpectrum.fillRect(xCoord, y, barWidth, h);
         }
@@ -1520,7 +1529,7 @@ function drawAxisLabel() {
         const labelHeight = canvasAxis.height / numLabels;
         console.log(canvasAxis.width)
         for (let n = 1; n <= numLabels; n++) {
-            const label = `${((16000 / 2) / numLabels) * n} Hz`; // Example frequency labels
+            const label = `${((SAMPLEFREQ / 2) / numLabels) * n} Hz`; // Example frequency labels
             ctxAxis.fillText(label, canvasAxis.width - 51, canvasAxis.height - n * labelHeight + 4); // Adjust position as needed
 
             ctxAxis.fillRect(
@@ -1536,7 +1545,7 @@ function drawAxisLabel() {
         const melNum = Math.floor(mel.length / numLabels);
 
         for (let n = 0; n <= numLabels; n++) {
-            const label = `${((16000 / 2) / numLabels) * n} Hz`; // Example frequency labels
+            const label = `${((SAMPLEFREQ / 2) / numLabels) * n} Hz`; // Example frequency labels
 
             const melValue = mel[n * melNum];
 

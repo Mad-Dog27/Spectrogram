@@ -21,6 +21,8 @@ let expectedChunkTime = CAPTURE_SIZE/16000
 let newAudioChunk = new Float32Array(128)
 let totalAudioChunk = null;
 let chosenChunk = null;
+let count = 0;
+let count2 = 0;
 
 let KERNEL = generateLowPassKernel(SAMPLE_RATE/2, DEVICE_SAMPLE_RATE, 101)
 updateRequiredFrameSize();
@@ -36,6 +38,7 @@ onmessage = function (e) {
     ratio =  SAMPLE_RATE/DEVICE_SAMPLE_RATE;
     console.log(ratio)
     neededFrameSize = FRAME_SIZE / ratio;
+    console.log(neededFrameSize)
     KERNEL = generateLowPassKernel(SAMPLE_RATE/2, DEVICE_SAMPLE_RATE, 101)
     updateRequiredFrameSize();
     
@@ -43,35 +46,37 @@ onmessage = function (e) {
 
     } else if (e.data.type === "paused") {
         PAUSED = e.data.paused;
+
+        console.log(count)
+                console.log(count2)
+
     } else { 
         if (!PAUSED) {
         
             let audioChunk = e.data
-
+            count2++;
             if (newAudioChunk == null) {
                newAudioChunk = audioChunk
                return
             }
             newAudioChunk = appendBuffer(newAudioChunk, audioChunk);
-            console.log(neededFrameSize)
             if (newAudioChunk.length >= neededFrameSize) {
                 totalAudioChunk = newAudioChunk.slice(0, neededFrameSize)
                 newAudioChunk = null;
-                if (SAMPLE_RATE == DEVICE_SAMPLE_RATE) {
-                let filteredChunk = applyFIRFilter(totalAudioChunk, KERNEL)
+                if (SAMPLE_RATE != DEVICE_SAMPLE_RATE) {
+                //let filteredChunk = applyFIRFilter(totalAudioChunk, KERNEL)
                 //let resampledAudioChunk = downsample(filteredChunk, 3)
-                let resampledAudioChunk = resampleMicBuffer(filteredChunk);
+                let resampledAudioChunk = resampleMicBuffer(totalAudioChunk);
                     chosenChunk = resampledAudioChunk;
-                                       console.log(chosenChunk)
 
-                    console.log("RESAMPLED")
                 } else {
                     chosenChunk = totalAudioChunk;
                 }
                 let thunk = totalAudioChunk
                 postMessage(chosenChunk, [chosenChunk.buffer]); // Pass along to next stage (fftWorker)
                 totalAudioChunk = null;
-
+                count++;
+                
              } else {return;} 
       
     
@@ -118,6 +123,7 @@ function resampleMicBuffer(buffer) {//This works
     //console.log(buffer)
     //const ratio = DEVICE_SAMPLE_RATE / SAMPLE_RATE; // deviceFS / sampleFREQ (user chosen)
     let newBuffer = new Float32Array(FRAME_SIZE);
+
     if (DEVICE_SAMPLE_RATE == SAMPLE_RATE) { 
         console.log("NOPE")
         return buffer; } // if no resampling needed
