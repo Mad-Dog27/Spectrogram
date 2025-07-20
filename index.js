@@ -106,8 +106,8 @@ ctxSpectrum.imageSmoothingEnabled = true;
 //Global Constants
 let FRAMESIZE = 128; //time domain amount of samples taken
 let nFFT = 4096; //frequency domain amount zeroes and values aquired through fft
-let overlapPercent = 0.25;
-let overlap = Math.round(FRAMESIZE * overlapPercent);
+let OVERLAP_PERCENT = 0.25;
+let overlap = Math.round(FRAMESIZE * OVERLAP_PERCENT);
 const SPEED = 1;
 let SAMPLEFREQ = 16000;
 //Global Variables
@@ -147,9 +147,9 @@ let POW = 5;
 let contrastOn = false;
 
 let originalAudioBuffer;
-chosenWindow = "blackman Harris"// rectangular, hamming, blackman Harris
+let CHOSEN_WINDOW = "blackman Harris"// rectangular, hamming, blackman Harris
 chosenColourScheme = 'greyScale'
-chosenMagnitudeScale = "magnitude"
+let CHOSEN_MAGNITUDE_SCALE = "magnitude"
 
 canvasSpectrum.width = window.innerWidth * (WIDTH * 3) - 2;  // 70% of screen width minus borders
 canvasSpectrum.height = window.innerHeight * (HEIGHT * 1) - 2;
@@ -267,17 +267,21 @@ magnitudeSelect.addEventListener('change', (event) => {
     //Changing the window value, between Rectangular, hamming and blackman-harris
     globalMax = -10
     globalMin = 10
-    chosenMagnitudeScale = event.target.value;
-    console.log(`Window function selected: ${chosenMagnitudeScale}`);
-    if (chosenMagnitudeScale == "deciBels") { isDB = true; }
+    CHOSEN_MAGNITUDE_SCALE = event.target.value;
+    console.log(`Window function selected: ${CHOSEN_MAGNITUDE_SCALE}`);
+    if (CHOSEN_MAGNITUDE_SCALE == "deciBels") { isDB = true; }
     else {
         isDB = false;
     }
+    fftWorker.postMessage({ type: "config", chosenMagnitude: CHOSEN_MAGNITUDE_SCALE });
+
 });
 windowSelect.addEventListener('change', (event) => {
     //Changing the window value, between Rectangular, hamming and blackman-harris
-    chosenWindow = event.target.value;
-    console.log(`Window function selected: ${chosenWindow}`);
+    CHOSEN_WINDOW = event.target.value;
+    console.log(`Window function selected: ${CHOSEN_WINDOW}`);
+    fftWorker.postMessage({ type: "config", chosenWindow: CHOSEN_WINDOW});
+
 });
 colourSchemeSelect.addEventListener('change', (event) => {
     //Changing the colour scheme, between grey scale and heated metal - WORK IN PROGRESS
@@ -293,7 +297,7 @@ frameSizeSlider.addEventListener('input', () => {
     frameUpdated = true;
     intervalId = null;
     //nFFT = FRAMESIZE * 2; //frequency domain amount zeroes and values aquired through fft
-    overlap = Math.round(FRAMESIZE * overlapPercent);
+    overlap = Math.round(FRAMESIZE * OVERLAP_PERCENT);
     FRAME__SIZE = FRAMESIZE
 micWorker.postMessage({ type: "config", sampleRate: SAMPLE__RATE,  deviceSampleRate: DEVICESAMPLERATE, frame_size: FRAME__SIZE });
 fftWorker.postMessage({ type: "config", sampleRate: SAMPLE__RATE,  deviceSampleRate: DEVICESAMPLERATE, frame_size: FRAME__SIZE });
@@ -335,8 +339,8 @@ widthSlider.addEventListener('input', () => {
     console.log(`Width: ${WIDTH}`);
     
 });*/
-
 //sample frequcy slider input
+canvasSpectrum.width = window.innerWidth/2
 sampleFreqSlider.addEventListener('input', () => {//Function to update the INputed Sampling freq, this will improved freqeuency resolution but only untill you reach the original inputed frequency
     SAMPLEFREQ = sampleFreqSlider.value; //
     sampleFreqSliderValue.textContent = SAMPLEFREQ; // Update the display
@@ -356,11 +360,12 @@ fftWorker.postMessage({ type: "config", sampleRate: SAMPLE__RATE,  deviceSampleR
 });
 // overlap input
 overlapPercSlider.addEventListener('input', () => {
-    overlapPercent = overlapPercSlider.value;
-    overlapPercSliderValue.textContent = overlapPercent; // Update the display
+    OVERLAP_PERCENT = overlapPercSlider.value;
+    overlapPercSliderValue.textContent = OVERLAP_PERCENT; // Update the display
     //recalculate amount of samples in overlap
-    overlap = Math.round(FRAMESIZE * overlapPercent);
+    overlap = Math.round(FRAMESIZE * OVERLAP_PERCENT);
     console.log(overlap)
+    fftWorker.postMessage({ type: "config", sampleRate: SAMPLE__RATE,  deviceSampleRate: DEVICESAMPLERATE, frame_size: FRAME__SIZE, overlapPercent: OVERLAP_PERCENT });
 
 });
 
@@ -393,6 +398,7 @@ const micWorker = new Worker('micWorker.js');
 const fftWorker = new Worker('fftWorker.js');
 
 micWorker.postMessage({ type: "config", sampleRate: SAMPLE__RATE,  deviceSampleRate: DEVICESAMPLERATE, frame_size: FRAME__SIZE });
+fftWorker.postMessage({ type: "config", sampleRate: SAMPLE__RATE,  deviceSampleRate: DEVICESAMPLERATE, frame_size: FRAME__SIZE, overlapPercent: OVERLAP_PERCENT, chosenWindow: CHOSEN_WINDOW, chosenMagnitude: CHOSEN_MAGNITUDE_SCALE });
 
 let latestFFTData = new Float32Array(nFFT);
 let chunk = new Float32Array(FRAMESIZE);
@@ -440,7 +446,7 @@ function drawLoop() {
 
             }
                   
-            for (let i = 0; i < 1; i++) {
+            for (let i = 0; i < 2; i++) {
                 createSpectrum(latestFFTData)
                 createMovingSpectrogram(latestFFTData);
                 timeGraph(chunk)
@@ -634,7 +640,7 @@ async function getMicData() {
             runs++;
 
             //magnitude selection 
-            if (chosenMagnitudeScale == "magnitude") {
+            if (CHOSEN_MAGNITUDE_SCALE == "magnitude") {
                 const data = computeMagnitudeAndDB(result, 1, false);
 
                 dataMagnitude = data.map(bin => bin.magnitude);
@@ -714,7 +720,7 @@ function addOverLap(timeDomainBuffer, prevTimeDomainBuffer) { //WRONG OVERLAP SH
     
     const prevLength = prevTimeDomainBuffer.length;
     //new overlap in terms of samples
-    const newOverlap = Math.floor(overlapPercent * FRAMESIZE);
+    const newOverlap = Math.floor(OVERLAP_PERCENT * FRAMESIZE);
     
     let newCurrentBuffer = new Float32Array(FRAMESIZE)
     if (prevLength == 0) { // if no previous buffer, then no overlap applied 
@@ -789,7 +795,7 @@ function processRecording() {
         const chunk = addZeroes(applyWindow(storedBuffer[chunkIndex], FRAMESIZE));//Applying a window AND zero padding, the function above defaults to rectangular window
         const result = fft(chunk); //FAST FOURIER TRANSFORM
 
-        if (chosenMagnitudeScale == "magnitude") {
+        if (CHOSEN_MAGNITUDE_SCALE == "magnitude") {
             const dataMagnitude = result.map(bin => bin.magnitude);
             
             chosenValues = dataMagnitude.slice(0, nFFT / 2)
@@ -1135,18 +1141,18 @@ function sliceIntoChunks(audioBuffer) {
 }
 // apply a window function to each chunk BEFORE zero padding
 function applyWindow(chunk, frameLength) {
-    if (chosenWindow == "rectangular") { // no change
+    if (CHOSEN_WINDOW == "rectangular") { // no change
         return chunk;
     }
 
-    if (chosenWindow == "hamming") {
+    if (CHOSEN_WINDOW == "hamming") {
         for (let n = 0; n < frameLength; n++) {
             chunk[n] = chunk[n] * (0.54 - 0.46 * Math.cos((2 * Math.PI * n) / (frameLength - 1)));
         }
 
 
     }
-    if (chosenWindow == "blackman Harris") {
+    if (CHOSEN_WINDOW == "blackman Harris") {
         for (let n = 0; n < frameLength; n++) {
             chunk[n] = chunk[n] * (0.35875 - 0.48829 * Math.cos((2 * Math.PI * n) / (frameLength - 1)) +
                 0.14128 * Math.cos((4 * Math.PI * n) / (frameLength - 1)) -
@@ -1195,8 +1201,8 @@ for (let i = 0; i < X.length; i++) {
   const freq = i * 16000 / (2 * X.length); // or: sampleRate * i / fftSize
   const x = (freq / maxFreq) * canvas2D.width; // scaled to canvas
 
-  const value = X[i] * 9;
-  ctx2D.fillRect(x, canvas2D.height - value, 2, value);
+  const value = X[i] * 25;
+  ctx2D.fillRect(x, canvas2D.height - value, 1, value);
 }
 
 
@@ -1370,7 +1376,7 @@ function intensityToColor(intensity, maxValue, minValue) {
     
     // Ensure the range is valid, avoid dividing by zero
     let normValue;
-    if (chosenMagnitudeScale == "magnitude") {
+    if (CHOSEN_MAGNITUDE_SCALE == "magnitude") {
 
         if (range == 0) {
             normValue = 0; // Handle edge case where max and min are equal
@@ -1455,7 +1461,7 @@ function intensityToColor(intensity, maxValue, minValue) {
         }
 
 
-    } else if (chosenMagnitudeScale == "deciBels") { // if decibels 
+    } else if (CHOSEN_MAGNITUDE_SCALE == "deciBels") { // if decibels 
         const minIntensity = -150;
         const maxIntensity = 0;
         let normalized = Math.max(0, Math.min(1, (intensity - minIntensity) / (maxIntensity - minIntensity)));

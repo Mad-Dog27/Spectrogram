@@ -27,15 +27,22 @@ let overlapPercent = 0;
 let overlap = Math.round(FRAME_SIZE * overlapPercent);
 let PAUSED = false;
 
-let chosenWindow = "blackman Harris"// rectangular, hamming, blackman Harris
-let chosenMagnitudeScale = "magnitude"
+let CHOSEN_MAGNITUDE_SCALE = "magnitude"
+
+let OVERLAP_PERCENT = 0.25
+let CHOSEN_WINDOW = "blackman Harris"
 
 // Called when main thread sends audio chunks
 onmessage = function (e) {
     if (e.data.type == "config"){
-        SAMPLE_RATE = e.data.sampleRate;
-        DEVICE_SAMPLE_RATE = e.data.deviceSampleRate;
-        FRAME_SIZE = e.data.frame_size
+        if ("sampleRate" in e.data) SAMPLE_RATE = e.data.sampleRate;
+        if ("deviceSampleRate" in e.data) DEVICE_SAMPLE_RATE = e.data.deviceSampleRate;
+        if ("frame_size" in e.data) FRAME_SIZE = e.data.frame_size;
+        if ("overlapPercent" in e.data) OVERLAP_PERCENT = e.data.overlapPercent;
+        if ("chosenWindow" in e.data) CHOSEN_WINDOW = e.data.chosenWindow;
+        if ("chosenMagnitude" in e.data) CHOSEN_MAGNITUDE_SCALE = e.data.chosenMagnitude
+        console.log("fs (target):", SAMPLE_RATE, ", fs (device):",DEVICE_SAMPLE_RATE, ", frame size:", FRAME_SIZE,", overlap:", OVERLAP_PERCENT*100,"%, Window:", CHOSEN_WINDOW, ", Magnitude:",CHOSEN_MAGNITUDE_SCALE)
+
     } else if (e.data.type === "paused") {
         PAUSED = e.data.paused;
     }else {
@@ -43,11 +50,16 @@ onmessage = function (e) {
         if (!PAUSED) {
             let chosenValues;
             currentBuffer = new Float32Array(e.data);
-            const chunk = addZeroes(applyWindow(currentBuffer, FRAME_SIZE));//Applying a window AND zero padding, the function above defaults to rectangular window
+            console.log(currentBuffer)
+            console.log(prevBuffer)
+            const overlappedBuffer = addOverLap(currentBuffer)
+            console.log(overlappedBuffer)
+
+            const chunk = addZeroes(applyWindow(overlappedBuffer, FRAME_SIZE));//Applying a window AND zero padding, the function above defaults to rectangular window
 
             const thisChunk = fft(chunk)
         //let magnitudes = new Float32Array(thisChunk.length);
-            if (chosenMagnitudeScale == "magnitude") {
+            if (CHOSEN_MAGNITUDE_SCALE == "magnitude") {
                 const data = computeMagnitudeAndDB(thisChunk, 1, false);
                 let dataMagnitude = data.map(bin => bin.magnitude);
                 chosenValues = dataMagnitude.slice(0, NFFT / 2);
@@ -59,43 +71,8 @@ onmessage = function (e) {
             }
             let fftOutput = new Float32Array(chosenValues)
 
-            /*
-           let start1 = performance.now();
-        if (e.data.length*2 > NFFT) {NFFT = e.data.length*2}
-
-        currentBuffer = new Float32Array(e.data);
-
-        //console.log(currentBuffer)
-        const overlappedBuffer = addOverLap();
-                //console.log(overlappedBuffer)
-        //console.log(e.data)
-        console.log(currentBuffer)
-        const preparedChunk = addZeroes(applyWindow(currentBuffer, FRAME_SIZE));
-        console.log(preparedChunk)
-
-        const fftOutput = fft(preparedChunk)
-        //console.log(e.data)
-       
-        const len = fftOutput.length;
-        const magnitudes = new Float32Array(len);
-
-        for (let i = 0; i < len; i++) {
-        const real = fftOutput[i].real;
-        const imag = fftOutput[i].imag;
-        magnitudes[i] = Math.sqrt(real * real + imag * imag);
-        }
-
-        let start2 = performance.now();
-        postMessage({ type: "print", magnitudes});
-
-        //console.log("fft time: ", start2 - start1)
-        postMessage(magnitudes, [magnitudes.buffer]); // Pass along to next stage (fftWorker)
-            */
-                   //urrentBuffer = new Float32Array(e.data);
-        //postMessage({ type: "print", chosenValues});
         postMessage({ type: "print", currentBuffer});
-
-       postMessage(fftOutput, [fftOutput.buffer]);
+        postMessage(fftOutput, [fftOutput.buffer]);
     }   
 }
 };
@@ -115,19 +92,20 @@ function addZeroes(frame) { // add zeroes to match nFFT value
     return paddedFrame;
 }
 function applyWindow(unwindowChunk, frameLength) {
-    let chunk = new Float32Array(frameLength)
-    if (chosenWindow == "rectangular") { // no change
+    let chunk = new Float32Array(unwindowChunk)
+    if (CHOSEN_WINDOW == "rectangular") { // no change
+        console.log("hell")
         return chunk;
     }
 
-    if (chosenWindow == "hamming") {
+    if (CHOSEN_WINDOW == "hamming") {
         for (let n = 0; n < frameLength; n++) {
             chunk[n] = unwindowChunk[n] * (0.54 - 0.46 * Math.cos((2 * Math.PI * n) / (frameLength - 1)));
         }
 
 
     }
-    if (chosenWindow == "blackman Harris") {
+    if (CHOSEN_WINDOW == "blackman Harris") {
         for (let n = 0; n < frameLength; n++) {
             chunk[n] = unwindowChunk[n] * (0.35875 - 0.48829 * Math.cos((2 * Math.PI * n) / (frameLength - 1)) +
                 0.14128 * Math.cos((4 * Math.PI * n) / (frameLength - 1)) -
@@ -140,11 +118,11 @@ function applyWindow(unwindowChunk, frameLength) {
 }
 // addoverlap to a buffer using the previous buffer
 function addOverLap() {
-    if (overlap > 0) {
+    if (OVERLAP_PERCENT > 0) {
     const safeCurrent = new Float32Array(currentBuffer); // full copy
     const safePrev = new Float32Array(prevBuffer);       // full copy
 
-  let newOverlap = Math.floor(overlapPercent * FRAME_SIZE);
+  let newOverlap = Math.floor(OVERLAP_PERCENT * FRAME_SIZE);
   const newCurrentBuffer = new Float32Array(FRAME_SIZE);
   // If no previous buffer, just fill with zeros + current
   if (safePrev.length === 0) {
@@ -159,17 +137,10 @@ function addOverLap() {
     newOverlap = prevLength 
   }
 
-  // Copy overlap from end of previous buffer to start of new buffer
   newCurrentBuffer.set(safePrev.slice(safePrev.length - newOverlap), 0);
-
-  // Copy new audio into rest
   newCurrentBuffer.set(safeCurrent.slice(0, FRAME_SIZE - newOverlap), newOverlap);
 
-  // Update prevBuffer for next call
-/*
-      console.log(safePrev.slice(safePrev.length - newOverlap))
-  console.log(safeCurrent.slice(0, FRAME_SIZE - newOverlap))
-  console.log(newCurrentBuffer)*/
+ 
 
 
     prevBuffer = newCurrentBuffer.slice();
