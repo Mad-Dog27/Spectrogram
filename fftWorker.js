@@ -93,7 +93,7 @@ onmessage = function (e) {
             */
                    //urrentBuffer = new Float32Array(e.data);
         //postMessage({ type: "print", chosenValues});
-        //postMessage({ type: "print", currentBuffer});
+        postMessage({ type: "print", currentBuffer});
 
        postMessage(fftOutput, [fftOutput.buffer]);
     }   

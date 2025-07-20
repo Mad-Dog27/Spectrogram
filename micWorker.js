@@ -64,9 +64,9 @@ onmessage = function (e) {
                 totalAudioChunk = newAudioChunk.slice(0, neededFrameSize)
                 newAudioChunk = null;
                 if (SAMPLE_RATE != DEVICE_SAMPLE_RATE) {
-                //let filteredChunk = applyFIRFilter(totalAudioChunk, KERNEL)
+                let filteredChunk = applyFIRFilter(totalAudioChunk, KERNEL)
                 //let resampledAudioChunk = downsample(filteredChunk, 3)
-                let resampledAudioChunk = resampleMicBuffer(totalAudioChunk);
+                let resampledAudioChunk = resampleMicBuffer(filteredChunk);
                     chosenChunk = resampledAudioChunk;
 
                 } else {

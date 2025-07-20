@@ -398,6 +398,7 @@ let chunk = new Float32Array(FRAMESIZE);
 fftWorker.onmessage = (e) => {
     if (e.data.type === "print"){
         chunk = e.data.currentBuffer
+        /*
         console.log(chunk)
         let fftchunk = fft(addZeroes(applyWindow(chunk, FRAMESIZE)))
         let data = computeMagnitudeAndDB(fftchunk, 1, false);
@@ -406,9 +407,9 @@ fftWorker.onmessage = (e) => {
 
         console.log(chosenValues)
         createSpectrum(chosenValues)
+        */
     } else {
     latestFFTData = e.data
-    console.log(latestFFTData)
 }
 };
 
@@ -438,14 +439,26 @@ function drawLoop() {
 
             }
                   
-            for (let i = 0; i < 2; i++) {
+            for (let i = 0; i < 1; i++) {
                 createSpectrum(latestFFTData)
                 createMovingSpectrogram(latestFFTData);
-
+                timeGraph(chunk)
             }  
         }
     }
 }
+function drawWave(ctx, data, canvasHeight) {
+  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  ctx.beginPath();
+  data.forEach((point, i) => {
+    const yMin = ((1 - point.min) / 2) * canvasHeight;
+    const yMax = ((1 - point.max) / 2) * canvasHeight;
+    ctx.moveTo(i, yMin);
+    ctx.lineTo(i, yMax);
+  });
+  ctx.stroke();
+}
+
 function downloadAsTextFile(filename, dataArray) {
     const text = dataArray.join('\n'); // turn array into newline-separated string
     const blob = new Blob([text], { type: 'text/plain' });
@@ -463,7 +476,7 @@ function downloadAsTextFile(filename, dataArray) {
 //drawLoop();
 
 async function startAudioPipeline() {
-    const audioContext = new AudioContext({ sampleRate: 48000 });
+    const audioContext = new AudioContext({ sampleRate: DEVICESAMPLERATE });
     
     // Load the AudioWorkletProcessor
     await audioContext.audioWorklet.addModule('micProcessor.js');
@@ -1191,7 +1204,7 @@ for (let i = 0; i < X.length; i++) {
 
 // function to display the audio wave - VERY LAGGY
 function timeGraph(chunk) {
-    const num = 3;
+    const num = 10;
     const frameRatio = Math.floor(FRAMESIZE / num)
     const barWidth = 1; // Width of the bar
     const maxHeight = timeCanvas.height; // Centerline of the canvas
