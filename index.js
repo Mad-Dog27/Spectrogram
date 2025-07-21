@@ -105,7 +105,7 @@ let timeDiffs = []
 ctxSpectrum.imageSmoothingEnabled = true;
 //Global Constants
 let FRAMESIZE = 128; //time domain amount of samples taken
-let nFFT = 4096; //frequency domain amount zeroes and values aquired through fft
+let nFFT = 4096*2; //frequency domain amount zeroes and values aquired through fft
 let OVERLAP_PERCENT = 0.25;
 let overlap = Math.round(FRAMESIZE * OVERLAP_PERCENT);
 const SPEED = 1;
@@ -340,7 +340,7 @@ widthSlider.addEventListener('input', () => {
     
 });*/
 //sample frequcy slider input
-canvasSpectrum.width = window.innerWidth/2
+//canvasSpectrum.width = window.innerWidth/2
 sampleFreqSlider.addEventListener('input', () => {//Function to update the INputed Sampling freq, this will improved freqeuency resolution but only untill you reach the original inputed frequency
     SAMPLEFREQ = sampleFreqSlider.value; //
     sampleFreqSliderValue.textContent = SAMPLEFREQ; // Update the display
@@ -1322,6 +1322,8 @@ function createMovingSpectrogram(X) {
     const binHeight = height / (nFFT / 2);
     const ratio =1//fs/16000;
 
+    const maxBin = (8000 / nyquist) * (nFFT/2)
+
     // Shift canvas to the left
     ctxSpectrum.drawImage(canvasSpectrum, -barWidth, 0);
     ctxSpectrum.clearRect(width - barWidth, 0, barWidth, height);
@@ -1329,6 +1331,7 @@ function createMovingSpectrogram(X) {
     // Precompute max/min values once (could be passed in from FFT too)
     let maxValue = -10;
     let minValue = 10;
+    /*
     for (let i = 0; i < X.length; i++) {
         const val = X[i];
         if (val > maxValue) maxValue = val;
@@ -1336,11 +1339,19 @@ function createMovingSpectrogram(X) {
     }
         globalMax = Math.max(globalMax * 0.99, maxValue); // slow decay
         globalMin = Math.min(globalMin * 1.01, minValue); // slow decay
+        */
+       if (CHOSEN_MAGNITUDE_SCALE == "magnitude") {
+        globalMax = 2
+        globalMin = 0
+       } else {
+        globalMax = 0
+        globalMin = -60
+       }
     if (!melOn) {
         // Linear frequency scale
         const xCoord = width - barWidth;
 
-        for (let i = 0; i < X.length; i++) {
+        for (let i = 0; i < maxBin; i++) {
             const intensity = X[i];
             const y = height - (i / (nFFT / 2)) * height * ratio;
             const h = binHeight * ratio;
@@ -1361,7 +1372,7 @@ function createMovingSpectrogram(X) {
             const melY = height - mel[ratio * i];
             const melHeight = mel[i + 1] - mel[i - 1]; // Local bandwidth approximation
 
-            ctxSpectrum.fillStyle = intensityToColor(X[i], maxValue, minValue);
+            ctxSpectrum.fillStyle = intensityToColor(X[i], globalMax, globalMin);
             ctxSpectrum.fillRect(xCoord, melY, barWidth, melHeight);
         }
     }

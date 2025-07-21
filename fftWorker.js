@@ -16,7 +16,7 @@ let higherPower = 1;
 let closestFrameSize = FRAME_SIZE;
 let neededFrameSize = FRAME_SIZE / ratio;
 let closestNeededFrameSize = neededFrameSize;
-let NFFT = 4096
+let NFFT = 4096*2
 let expectedChunkTime = CAPTURE_SIZE/SAMPLE_RATE
 let newAudioChunk = new Float32Array(FRAME_SIZE)
 
