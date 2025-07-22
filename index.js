@@ -399,7 +399,7 @@ const fftWorker = new Worker('fftWorker.js');
 
 micWorker.postMessage({ type: "config", sampleRate: SAMPLE__RATE,  deviceSampleRate: DEVICESAMPLERATE, frame_size: FRAME__SIZE });
 fftWorker.postMessage({ type: "config", sampleRate: SAMPLE__RATE,  deviceSampleRate: DEVICESAMPLERATE, frame_size: FRAME__SIZE, overlapPercent: OVERLAP_PERCENT, chosenWindow: CHOSEN_WINDOW, chosenMagnitude: CHOSEN_MAGNITUDE_SCALE });
-
+let m =0;
 let latestFFTData = new Float32Array(nFFT);
 let chunk = new Float32Array(FRAMESIZE);
 fftWorker.onmessage = (e) => {
@@ -417,6 +417,8 @@ fftWorker.onmessage = (e) => {
         */
     } else {
     latestFFTData = e.data
+   
+    
 }
 };
 
@@ -446,10 +448,11 @@ function drawLoop() {
 
             }
                   
-            for (let i = 0; i < 2; i++) {
+            for (let i = 0; i < 1; i++) {
                 createSpectrum(latestFFTData)
                 createMovingSpectrogram(latestFFTData);
                 timeGraph(chunk)
+                
             }  
         }
     }
@@ -1315,7 +1318,8 @@ let globalMin = 0;
 
 function createMovingSpectrogram(X) {
     const fs = SAMPLEFREQ;
-    const barWidth = 1;
+    let barWidth = 10;
+    if (FRAMESIZE ==1024) {barWidth = 1;}
     const height = canvasSpectrum.height;
     const width = canvasSpectrum.width;
     const nyquist = fs / 2;

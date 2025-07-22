@@ -10,7 +10,6 @@ let SAMPLE_RATE = 16000;
 let FRAME_SIZE = 128;
 let CAPTURE_SIZE = 128;
 let ratio =  SAMPLE_RATE/DEVICE_SAMPLE_RATE;
-console.log("frf", ratio)
 let lowerPower = 1;
 let higherPower = 1;
 let closestFrameSize = FRAME_SIZE;
@@ -32,6 +31,8 @@ let CHOSEN_MAGNITUDE_SCALE = "magnitude"
 let OVERLAP_PERCENT = 0.25
 let CHOSEN_WINDOW = "blackman Harris"
 
+let movingAvg = new Float32Array(128)
+
 // Called when main thread sends audio chunks
 onmessage = function (e) {
     if (e.data.type == "config"){
@@ -49,21 +50,25 @@ onmessage = function (e) {
         
         if (!PAUSED) {
             let chosenValues;
-            currentBuffer = new Float32Array(e.data);
-            console.log(currentBuffer)
-            console.log(prevBuffer)
-            const overlappedBuffer = addOverLap(currentBuffer)
-            console.log(overlappedBuffer)
 
+            currentBuffer = new Float32Array(e.data);
+            const overlappedBuffer = addOverLap(currentBuffer)
             const chunk = addZeroes(applyWindow(overlappedBuffer, FRAME_SIZE));//Applying a window AND zero padding, the function above defaults to rectangular window
 
             const thisChunk = fft(chunk)
-        //let magnitudes = new Float32Array(thisChunk.length);
+
             if (CHOSEN_MAGNITUDE_SCALE == "magnitude") {
                 const data = computeMagnitudeAndDB(thisChunk, 1, false);
                 let dataMagnitude = data.map(bin => bin.magnitude);
                 chosenValues = dataMagnitude.slice(0, NFFT / 2);
                 
+                /*currentValues2 = currentBuffer.map((val, i) => 0.2*val * movingAvg[i])
+                
+                chosenValues = currentValues.map((val, i) => val*0.8) + currentValues2
+                movingAvg = new Float32Array(currentValues);
+                */
+              
+
             } else {
                 const data = computeMagnitudeAndDB(thisChunk, 1, true);
                 let datadB = data.map(bin => bin.dB);
@@ -71,8 +76,8 @@ onmessage = function (e) {
             }
             let fftOutput = new Float32Array(chosenValues)
 
-        postMessage({ type: "print", currentBuffer});
-        postMessage(fftOutput, [fftOutput.buffer]);
+            postMessage({ type: "print", currentBuffer});
+            postMessage(fftOutput, [fftOutput.buffer]);
     }   
 }
 };
@@ -94,7 +99,6 @@ function addZeroes(frame) { // add zeroes to match nFFT value
 function applyWindow(unwindowChunk, frameLength) {
     let chunk = new Float32Array(unwindowChunk)
     if (CHOSEN_WINDOW == "rectangular") { // no change
-        console.log("hell")
         return chunk;
     }
 
