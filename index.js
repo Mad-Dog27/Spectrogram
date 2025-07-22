@@ -199,7 +199,7 @@ audioFileInput.addEventListener('change', async (event) => { //AUDIO FILE INPUT
    
     if (threadedMicOn) {
         threadedMicOn = false;
-        audioContext.suspend();//Pause the audiocontext from capturing data
+        //audioContext.suspend();//Pause the audiocontext from capturing data
         //micWorker.terminate(); 
         toggle = true;
         micWorker.postMessage({ type: "paused", paused: PAUSED});
@@ -375,7 +375,7 @@ recordButtonInput.addEventListener('click', () => {
         recordOn = false;
         recordValue.textContent = "no"
     } else {
-        storedBuffer = []; //reset recording
+        //storedBuffer = []; //reset recording
         recordOn = true;
         recordValue.textContent = "yes"
     }
@@ -417,7 +417,12 @@ fftWorker.onmessage = (e) => {
         */
     } else {
     latestFFTData = e.data
-   
+    if (recordOn) { //record mic input 
+                    //noOverlapBuffer[chunkIndex] = resampledTimeDomainBuffer;
+            storedBuffer[m] = latestFFTData;
+            m++;
+       
+    }
     
 }
 };
@@ -451,7 +456,7 @@ function drawLoop() {
             for (let i = 0; i < 1; i++) {
                 createSpectrum(latestFFTData)
                 createMovingSpectrogram(latestFFTData);
-                timeGraph(chunk)
+                //timeGraph(chunk)
                 
             }  
         }
@@ -793,8 +798,54 @@ function resampleMicBuffer(buffer, originalRate, targetRate, closestFrameSize) {
 }
 
 // Process recording from microphone - still in testing
+/*
 function processRecording() {
-    for (let chunkIndex = 0; chunkIndex < storedBuffer.length; chunkIndex++) {
+    let displayingRecording = true;
+    let j = 0;
+    let runTime = 0;
+    let startTime = audioContext.currentTime;
+    let currentTime = 0;
+    let prevChunkTime = 0;  
+    while (displayingRecording){
+            
+        if (currentTime > expectedChunkTime ) {
+            createMovingSpectrogram(storedBuffer[j])
+            createSpectrum(storedBuffer[j])
+            j++
+            if (j >= storedBuffer.length) {
+                displayingRecording = false;
+                j = 0;
+                
+            }
+            
+        }
+        runTime = audioContext.currentTime - startTime;
+            currentTime = runTime - prevChunkTime; //calculating how long this chunk has occured.
+            prevChunkTime += currentTime; //sum of all prev chunk times
+
+    }
+
+}*/
+let j = 0;
+let startTime = audioContext.currentTime;
+
+function processRecording() {
+    let runTime = audioContext.currentTime - startTime;
+    let expectedTime = j * (1/60)//expectedChunkTime;
+
+    if (runTime >= expectedTime && j < storedBuffer.length) {
+        createMovingSpectrogram(storedBuffer[j]);
+        createSpectrum(storedBuffer[j]);
+        j++;
+    }
+
+    if (j < storedBuffer.length) {
+        requestAnimationFrame(processRecording);
+    } 
+}
+
+
+    /*for (let chunkIndex = 0; chunkIndex < storedBuffer.length; chunkIndex++) {
         const chunk = addZeroes(applyWindow(storedBuffer[chunkIndex], FRAMESIZE));//Applying a window AND zero padding, the function above defaults to rectangular window
         const result = fft(chunk); //FAST FOURIER TRANSFORM
 
@@ -810,8 +861,8 @@ function processRecording() {
         //drawVisual(analyser)
         createSpectrum(chosenValues);
         createMovingSpectrogram(chosenValues);
-    }
-}
+    }*/
+//}
    
 // process file input audio buffer (setup)
 async function processAudioBuffer(audioBuffer) {
