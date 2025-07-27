@@ -12,7 +12,7 @@
     /* Aligns items at the top */
     gap: 15px;
     /* Adds spacing between main box and controls */
-    width: 100%;
+    /*width: 100%;
     margin-top: 1px;
     /* Adds space above the container */
 }
@@ -31,6 +31,7 @@
     /* Stack the controls vertically */
     gap: 10px;
     /* Space between controls */
+    width: 10px;
 }
 
 .canvasWrapper {
@@ -54,7 +55,7 @@
     margin: 5px;
     border: 1px solid black;
     width: 84vw;
-    height: 20vh;
+    height: 15vh;
 }
 
 #canvasAxis {
@@ -84,6 +85,32 @@
 .fileInput-container {
     display: flex;
     gap: 10px;
+}
+
+.record-container {
+    display: flex;
+    gap: 10px;
+    width: 20px
+}
+.record-container button {
+display: flex;
+  width: 0px;       /* Fixed width */
+  height: 20px;       /* Fixed height */
+  font-size: 10px;
+  padding: 0;         /* Optional: use 0 if you want exact box size */
+  margin: 5px;
+  border-radius: 8px;
+  cursor: pointer;
+  box-sizing: border-box;  /* Ensures padding/border doesn't increase total size */
+}
+#playRecord {
+    height:30px;
+}
+#overlapPercSlider {
+    width: 20px;
+}
+#overlapPercSliderValue{
+    width: 20px;
 }
 
 body {

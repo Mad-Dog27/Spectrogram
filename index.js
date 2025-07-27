@@ -105,7 +105,7 @@ let timeDiffs = []
 ctxSpectrum.imageSmoothingEnabled = true;
 //Global Constants
 let FRAMESIZE = 128; //time domain amount of samples taken
-let nFFT = 4096*2; //frequency domain amount zeroes and values aquired through fft
+let nFFT = 8192; //frequency domain amount zeroes and values aquired through fft
 let OVERLAP_PERCENT = 0.25;
 let overlap = Math.round(FRAMESIZE * OVERLAP_PERCENT);
 const SPEED = 1;
@@ -147,7 +147,7 @@ let POW = 5;
 let contrastOn = false;
 
 let originalAudioBuffer;
-let CHOSEN_WINDOW = "blackman Harris"// rectangular, hamming, blackman Harris
+let CHOSEN_WINDOW = "hamming"// rectangular, hamming, blackman Harris
 chosenColourScheme = 'greyScale'
 let CHOSEN_MAGNITUDE_SCALE = "magnitude"
 
@@ -204,7 +204,12 @@ audioFileInput.addEventListener('change', async (event) => { //AUDIO FILE INPUT
         toggle = true;
         micWorker.postMessage({ type: "paused", paused: PAUSED});
         fftWorker.postMessage({ type: "paused", paused: PAUSED});
-
+                        console.log(count)
+        processAgainInput.innerHTML = "&#9654;";
+        if (intervalId2 !== null) {
+            clearInterval(intervalId2);
+            intervalId2 = null;
+        }
         //fftWorker.terminate();
         return;
     } else if (singleThreadMicOn) {console.log("Single Thread Microphone is in use"); return;} 
@@ -216,7 +221,9 @@ audioFileInput.addEventListener('change', async (event) => { //AUDIO FILE INPUT
 
         drawLoop();
         startAudioPipeline().catch(console.error);
-        
+        processAgainInput.innerHTML = "&#9208;";
+        console.log(processAgainInput.innerHTML)
+
     
 })
 micButtonInput.addEventListener('click', () => {
@@ -361,7 +368,7 @@ fftWorker.postMessage({ type: "config", sampleRate: SAMPLE__RATE,  deviceSampleR
 // overlap input
 overlapPercSlider.addEventListener('input', () => {
     OVERLAP_PERCENT = overlapPercSlider.value;
-    overlapPercSliderValue.textContent = OVERLAP_PERCENT; // Update the display
+    overlapPercSliderValue.textContent = OVERLAP_PERCENT
     //recalculate amount of samples in overlap
     overlap = Math.round(FRAMESIZE * OVERLAP_PERCENT);
     console.log(overlap)
@@ -374,10 +381,14 @@ recordButtonInput.addEventListener('click', () => {
     if (recordOn) {
         recordOn = false;
         recordValue.textContent = "no"
+        recordButtonInput.innerHTML = "&#128280;";
     } else {
         //storedBuffer = []; //reset recording
+
         recordOn = true;
         recordValue.textContent = "yes"
+        recordButtonInput.innerHTML = "&#128308;"
+
     }
 })
 // play the recording input
@@ -405,6 +416,8 @@ let chunk = new Float32Array(FRAMESIZE);
 fftWorker.onmessage = (e) => {
     if (e.data.type === "print"){
         chunk = e.data.currentBuffer
+        recordingchunk[f] = chunk
+        f++;
         /*
         console.log(chunk)
         let fftchunk = fft(addZeroes(applyWindow(chunk, FRAMESIZE)))
@@ -417,6 +430,10 @@ fftWorker.onmessage = (e) => {
         */
     } else {
     latestFFTData = e.data
+    //createSpectrum(latestFFTData)
+    //createMovingSpectrogram(latestFFTData);
+    count++
+//timeGraph(chunk)
     if (recordOn) { //record mic input 
                     //noOverlapBuffer[chunkIndex] = resampledTimeDomainBuffer;
             storedBuffer[m] = latestFFTData;
@@ -429,39 +446,28 @@ fftWorker.onmessage = (e) => {
 
 let g = 0;
 // Create spectrogram visualization loop
+let intervalId2 = null
 let thisChunk = null;
+let recordingchunk = []
+let f = 0;
 function drawLoop() {
     if (!toggle){
-        
-        requestAnimationFrame(drawLoop);
+        intervalId2 = setInterval(() => {
+        //requestAnimationFrame(drawLoop);
         if (latestFFTData.length > 0) {
-            if (g == 100){
-                downloadAsTextFile("this", latestFFTData)
-                const chunk = addZeroes(applyWindow(latestFFTData, FRAMESIZE));//Applying a window AND zero padding, the function above defaults to rectangular window
-
-                thisChunk = fft(chunk)
-
-                let magnitudes = new Float32Array(thisChunk.length);
-
-                for (let i = 0; i < thisChunk.length; i++) {
-                const real = thisChunk[i].real;
-                const imag = thisChunk[i].imag;
-                magnitudes[i] = 10*Math.sqrt(real * real + imag * imag);
-                }
-                createSpectrum(latestFFTData)
-                createMovingSpectrogram(latestFFTData);
-
-            }
                   
             for (let i = 0; i < 1; i++) {
-                createSpectrum(latestFFTData)
+               createSpectrum(latestFFTData)
                 createMovingSpectrogram(latestFFTData);
                 //timeGraph(chunk)
+                count++
                 
             }  
         }
+        }, (FRAMESIZE/SAMPLEFREQ)*1000)
     }
 }
+let count = 0;
 function drawWave(ctx, data, canvasHeight) {
   ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
   ctx.beginPath();
@@ -830,12 +836,14 @@ let j = 0;
 let startTime = audioContext.currentTime;
 
 function processRecording() {
+    console.log(recordingchunk)
     let runTime = audioContext.currentTime - startTime;
     let expectedTime = j * (1/60)//expectedChunkTime;
 
     if (runTime >= expectedTime && j < storedBuffer.length) {
         createMovingSpectrogram(storedBuffer[j]);
         createSpectrum(storedBuffer[j]);
+        timeGraph(recordingchunk[j])
         j++;
     }
 
@@ -1377,7 +1385,7 @@ function createMovingSpectrogram(X) {
     const binHeight = height / (nFFT / 2);
     const ratio =1//fs/16000;
 
-    const maxBin = (8000 / nyquist) * (nFFT/2)
+    const maxBin = (SAMPLEFREQ / nyquist) * (nFFT/2)
 
     // Shift canvas to the left
     ctxSpectrum.drawImage(canvasSpectrum, -barWidth, 0);
@@ -1396,7 +1404,7 @@ function createMovingSpectrogram(X) {
         globalMin = Math.min(globalMin * 1.01, minValue); // slow decay
         */
        if (CHOSEN_MAGNITUDE_SCALE == "magnitude") {
-        globalMax = 2
+        globalMax = 2.4
         globalMin = 0
        } else {
         globalMax = 0
