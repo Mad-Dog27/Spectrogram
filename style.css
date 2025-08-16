@@ -94,7 +94,6 @@
 }
 .record-container button {
 display: flex;
-  width: 0px;       /* Fixed width */
   height: 20px;       /* Fixed height */
   font-size: 10px;
   padding: 0;         /* Optional: use 0 if you want exact box size */

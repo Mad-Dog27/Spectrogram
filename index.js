@@ -450,23 +450,70 @@ let intervalId2 = null
 let thisChunk = null;
 let recordingchunk = []
 let f = 0;
+let currentFreq = 0;
+
 function drawLoop() {
     if (!toggle){
+        let startTime = performance.now()
         intervalId2 = setInterval(() => {
         //requestAnimationFrame(drawLoop);
         if (latestFFTData.length > 0) {
-                  
+            startTime = performance.now()
             for (let i = 0; i < 1; i++) {
                createSpectrum(latestFFTData)
                 createMovingSpectrogram(latestFFTData);
-                //timeGraph(chunk)
                 count++
-                
+                timeGraph(chunk)
+                let currentTime = performance.now() - startTime
+                currentFreq = 1000/currentTime
             }  
+
         }
-        }, (FRAMESIZE/SAMPLEFREQ)*1000)
+        }, (1/125))//(FRAMESIZE/SAMPLEFREQ)*1000)
     }
 }
+
+function updateFrequencyDisplay(freq) {
+    document.getElementById("freq-value").textContent = freq.toFixed(2);
+}
+// Example: update every second
+setInterval(() => {
+    updateFrequencyDisplay(currentFreq);
+}, 250);
+
+/*
+function drawLoop() {
+    if (!toggle){
+
+        requestAnimationFrame(drawLoop);
+        if (latestFFTData.length > 0) {
+            if (g == 100){
+                downloadAsTextFile("this", latestFFTData)
+                const chunk = addZeroes(applyWindow(latestFFTData, FRAMESIZE));//Applying a window AND zero padding, the function above defaults to rectangular window
+
+                thisChunk = fft(chunk)
+
+                let magnitudes = new Float32Array(thisChunk.length);
+
+                for (let i = 0; i < thisChunk.length; i++) {
+                const real = thisChunk[i].real;
+                const imag = thisChunk[i].imag;
+                magnitudes[i] = 10*Math.sqrt(real * real + imag * imag);
+                }
+                createSpectrum(latestFFTData)
+                createMovingSpectrogram(latestFFTData);
+
+            }
+
+            for (let i = 0; i < 1; i++) {
+                createSpectrum(latestFFTData)
+                createMovingSpectrogram(latestFFTData);
+                //timeGraph(chunk)
+
+            }  
+        }
+    }
+}*/
 let count = 0;
 function drawWave(ctx, data, canvasHeight) {
   ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
@@ -1273,7 +1320,7 @@ for (let i = 0; i < X.length; i++) {
 
 // function to display the audio wave - VERY LAGGY
 function timeGraph(chunk) {
-    const num = 10;
+    const num = 5//Math.ceil(128/FRAMESIZE);
     const frameRatio = Math.floor(FRAMESIZE / num)
     const barWidth = 1; // Width of the bar
     const maxHeight = timeCanvas.height; // Centerline of the canvas
@@ -1377,8 +1424,8 @@ let globalMin = 0;
 
 function createMovingSpectrogram(X) {
     const fs = SAMPLEFREQ;
-    let barWidth = 10;
-    if (FRAMESIZE ==1024) {barWidth = 1;}
+    let barWidth = 5;
+   // if (FRAMESIZE ==1024) {barWidth = 10;}
     const height = canvasSpectrum.height;
     const width = canvasSpectrum.width;
     const nyquist = fs / 2;
