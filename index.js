@@ -37,10 +37,8 @@ const optionWidth = "250px"
 //Button INputs for inputing Data
 const audioFileInput = document.getElementById('audioFileInput');
 const processAgainInput = document.getElementById('processAgain');
-processAgainInput.style.width = "120px"
 
 const micButtonInput = document.getElementById('Mic');
-micButtonInput.style.width = "120px"
 const recordValue = document.getElementById('recordValue');
 const playRecordButton = document.getElementById('playRecord');
 //Button Inputs for altering graphs
@@ -52,13 +50,7 @@ const recordButtonInput = document.getElementById('recordToggle');
 const windowSelect = document.getElementById('windowSelect');
 const colourSchemeSelect = document.getElementById('colourSelect');
 const magnitudeSelect = document.getElementById('magnitudeSelect');
-magnitudeSelect.style.width = optionWidth;
-colourSchemeSelect.style.width = optionWidth;
-windowSelect.style.width = optionWidth;
-recordButtonInput.style.width = optionWidth;
-smoothButtonInput.style.width = optionWidth;
-melButtonInput.style.width = optionWidth;
-playRecordButton.style.width = optionWidth;
+
 
 
 
@@ -128,8 +120,8 @@ let smoothOn = null;
 let melProcessed = false;
 let isDB = null;
 let REFERENCE = 2 ^ 15;
-let WIDTH = 0.7;    //0.7
-let HEIGHT = 0.7;  //0.49  DOESNT EFFECT - No point
+let WIDTH = 3;    //0.7
+let HEIGHT = 1;  //0.49  DOESNT EFFECT - No point
 let RecordProcessing = false;
 
 let expectedChunkTime = FRAMESIZE / SAMPLEFREQ;
@@ -151,16 +143,23 @@ let CHOSEN_WINDOW = "hamming"// rectangular, hamming, blackman Harris
 chosenColourScheme = 'greyScale'
 let CHOSEN_MAGNITUDE_SCALE = "magnitude"
 
-canvasSpectrum.width = window.innerWidth * (WIDTH * 3) - 2;  // 70% of screen width minus borders
+canvasSpectrum.width = window.innerWidth * (WIDTH) - 2;  // 70% of screen width minus borders
 canvasSpectrum.height = window.innerHeight * (HEIGHT * 1) - 2;
-canvasAxis.width = (canvasSpectrum.width + 2) / 3 - 2;
+canvasAxis.width = (canvasSpectrum.width + 2) / WIDTH - 2;
 canvasAxis.height = canvasSpectrum.height;
 
-timeCanvas.width = window.innerWidth * (WIDTH * 3) - 2;  // 70% of screen width minus borders
+timeCanvas.width = window.innerWidth * (WIDTH) - 2;  // 70% of screen width minus borders
 timeCanvas.height = window.innerHeight * 0.45 - 2;  // 45% of screen height minus borders
 
-let timeCanvasRelativeWidth = (timeCanvas.width + 2) - 2
+
 drawAxisLabel();
+
+const controls = document.getElementById("controls");
+const toggleBtn = document.getElementById("controlsToggle");
+
+toggleBtn.addEventListener("click", () => {
+    controls.classList.toggle("open");
+});
 
 let filechunk = [];
 let micchunk = [];
@@ -210,10 +209,13 @@ audioFileInput.addEventListener('change', async (event) => { //AUDIO FILE INPUT
             clearInterval(intervalId2);
             intervalId2 = null;
         }
+        console.log((performance.now() - properstarttime)/1000)
+        console.log("fsavg: ", 1000*count/(performance.now() - properstarttime))
         //fftWorker.terminate();
         return;
     } else if (singleThreadMicOn) {console.log("Single Thread Microphone is in use"); return;} 
-        
+            properstarttime = performance.now()
+    
         threadedMicOn = true;
         toggle = false;
         micWorker.postMessage({ type: "paused", paused: PAUSED});
@@ -429,10 +431,9 @@ fftWorker.onmessage = (e) => {
         createSpectrum(chosenValues)
         */
     } else {
-    latestFFTData = e.data
+    latestFFTData = (e.data)
     //createSpectrum(latestFFTData)
     //createMovingSpectrogram(latestFFTData);
-    count++
 //timeGraph(chunk)
     if (recordOn) { //record mic input 
                     //noOverlapBuffer[chunkIndex] = resampledTimeDomainBuffer;
@@ -451,7 +452,7 @@ let thisChunk = null;
 let recordingchunk = []
 let f = 0;
 let currentFreq = 0;
-
+let properstarttime = performance.now()
 function drawLoop() {
     if (!toggle){
         let startTime = performance.now()
@@ -469,7 +470,7 @@ function drawLoop() {
             }  
 
         }
-        }, (1/125))//(FRAMESIZE/SAMPLEFREQ)*1000)
+        }, (1/60))//(FRAMESIZE/SAMPLEFREQ)*1000)
     }
 }
 
@@ -1421,7 +1422,8 @@ let globalMin = 0;
 
 // Inside your draw/update loop:
 
-
+let MAX = -50;
+let MIN = 10;
 function createMovingSpectrogram(X) {
     const fs = SAMPLEFREQ;
     let barWidth = 5;
@@ -1437,10 +1439,11 @@ function createMovingSpectrogram(X) {
     // Shift canvas to the left
     ctxSpectrum.drawImage(canvasSpectrum, -barWidth, 0);
     ctxSpectrum.clearRect(width - barWidth, 0, barWidth, height);
-
     // Precompute max/min values once (could be passed in from FFT too)
     let maxValue = -10;
     let minValue = 10;
+    console.log("MAX: ", MAX)
+    console.log("Min: ", MIN)
     /*
     for (let i = 0; i < X.length; i++) {
         const val = X[i];
@@ -1451,7 +1454,7 @@ function createMovingSpectrogram(X) {
         globalMin = Math.min(globalMin * 1.01, minValue); // slow decay
         */
        if (CHOSEN_MAGNITUDE_SCALE == "magnitude") {
-        globalMax = 2.4
+        globalMax = 3
         globalMin = 0
        } else {
         globalMax = 0
@@ -1462,7 +1465,10 @@ function createMovingSpectrogram(X) {
         const xCoord = width - barWidth;
 
         for (let i = 0; i < maxBin; i++) {
+            
             const intensity = X[i];
+            if (intensity > MAX) {MAX = intensity}
+            if (intensity < MIN) {MIN = intensity}
             const y = height - (i / (nFFT / 2)) * height * ratio;
             const h = binHeight * ratio;
             //if ()
@@ -1583,25 +1589,19 @@ function intensityToColor(intensity, maxValue, minValue) {
 
 
     } else if (CHOSEN_MAGNITUDE_SCALE == "deciBels") { // if decibels 
-        const minIntensity = -150;
-        const maxIntensity = 0;
-        let normalized = Math.max(0, Math.min(1, (intensity - minIntensity) / (maxIntensity - minIntensity)));
-        let normalizedPowered = Math.pow((normalized), POW) //Questionable alteration of Decibell scale, could change min and max
-        let value = Math.round((1 - normalizedPowered) * 255);
+        const minIntensity = -60;
+        const maxIntensity = 10;
+
+        const clamped = Math.min(Math.max(intensity, minIntensity), maxIntensity);
+        const normed = 1 - (clamped - minIntensity) / (maxIntensity - minIntensity);
+        const greyScale = Math.round(normed * 255);
+        let value = greyScale
+        //let normalized = Math.max(0, Math.min(1, (intensity - minIntensity) / (maxIntensity - minIntensity)));
+        //let normalizedPowered = Math.pow((normalized), POW) //Questionable alteration of Decibell scale, could change min and max
+        //let value = Math.round((1 - normalizedPowered) * 255);
 
         if (chosenColourScheme == "greyScale") {
-            if (contrastOn) {
-                /*if (value < 100) {
-                    val = 100 - value
-                    value -= val * CONTRAST;
-
-                } */
-                if (value > 150) {
-                    val = value - 150
-                    value = value + (value - 150) * CONTRAST;
-                }
-
-            }
+            
 
             if (range != 0) {
 
@@ -1665,6 +1665,8 @@ function drawAxisLabel() {
     const labelChunkeness = 2;
     const numLabels = 20;
     const labelWidth = 10;
+
+    const numTimeLabels = canvasAxis.width/(5*10);
     if (!melOn) { // if normal
         ctxAxis.clearRect(canvasAxis.width - 51, 0, 51, canvasAxis.height)
         const labelHeight = canvasAxis.height / numLabels;
@@ -1679,7 +1681,17 @@ function drawAxisLabel() {
                 labelWidth,
                 labelChunkeness
             )
+            
+        }
 
+        for (let n = 1; n <= numTimeLabels; n++) {
+            console.log(n)
+            ctxAxis.fillRect(
+                canvasAxis.width - n*((6*10)+labelChunkeness),
+                canvasAxis.height - labelWidth,
+                labelChunkeness,
+                labelWidth
+            )
         }
     } else { // if mel
         ctxAxis.clearRect(canvasAxis.width - 51, 0, 51, canvasAxis.height)

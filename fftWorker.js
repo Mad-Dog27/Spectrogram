@@ -70,7 +70,7 @@ onmessage = function (e) {
               
 
             } else {
-                const data = computeMagnitudeAndDB(thisChunk, 1, true);
+                const data = computeMagnitudeAndDB(thisChunk,30, true);
                 let datadB = data.map(bin => bin.dB);
                 chosenValues = datadB.slice(0, NFFT / 2)
             }
@@ -221,7 +221,7 @@ function fft(input) {
 }
 function computeMagnitudeAndDB(fftResult, REF, useDB) {
     return fftResult.map(({ real, imag }) => {
-        const magnitude = Math.sqrt(real ** 2 + imag ** 2);
+        const magnitude = 2*(Math.sqrt(real ** 2 + imag ** 2));
         let dB = 0;
         if ((magnitude > 0) && (useDB)) {
         dB = useDB ? 20 * Math.log10(magnitude / REF) : -100;

@@ -15,34 +15,42 @@
 
     <div id="layoutContainer">
         <div id="mainBox">
+            <div id="interface">
+                 <!-- buttons, sliders, etc go here later -->
+            </div>
             <canvas id="timeCanvas"></canvas>
 
             <div class="canvasWrapper">
-                <canvas id="canvasAxis"></canvas>
-                <canvas id="canvasSpectrum"></canvas>
+            <canvas id="canvasAxis"></canvas>
+            <canvas id="canvasSpectrum"></canvas>
 
+            <div class="toolbar">
+                <button id="processAgain">&#9654;</button>
+                <button id="recordToggle"> <p>&#128280;<span id="recordValue"></span></p> </button>
+
+                <button id="playRecord">Play recording</button>
+
+                <div id="freq-display">
+                    <span class="label">Frequency:</span>
+                     <span id="freq-value">0.00</span>
+                    <span class="unit">Hz</span>
+                </div>
             </div>
         </div>
+
+    </div>
 
         <div id="controls">
             <brk></brk>
             <input type="file" id="audioFileInput" accept=".wav" />
             
             <div class="fileInput-container">
-                <button id="processAgain">&#9654;</button>
+                
                 <button id="Mic">SingleThreaded Mic Toggle</button>
             </div>
             
             <div class="record-container">
-                <button id="recordToggle"> <p>&#128280;<span id="recordValue"></span></p> </button>
-
-                <button id="playRecord">Play recording</button>
-
-                <div id="freq-display">
-    <span class="label">Frequency:</span>
-    <span id="freq-value">0.00</span>
-    <span class="unit">Hz</span>
-</div>
+                
 
                 
             </div>
@@ -114,6 +122,7 @@
                 <canvas id="canvas2D"></canvas>
             </div>
         </div>
+        <button id="controlsToggle">&#9776;</button>
 
     </div>
 
