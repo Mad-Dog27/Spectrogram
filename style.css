@@ -29,7 +29,7 @@ body {
 
 /* ------------------ THREE MAIN SECTIONS ------------------ */
 #interface {
-    flex: 0 0 15%;               /* 15% of height */
+    flex: 0 0 0%;               /* 15% of height */
     background: #f0f0f0;         /* just for visibility, remove if unwanted */
     padding: 0;
 }
@@ -37,7 +37,7 @@ body {
 #timeCanvas {
     flex: 0 0 12%;               /* 12% of height */
     width: 100%;
-    border: 1px solid black;
+    border-top: 1px solid black;
 }
 
 .canvasWrapper {
@@ -83,15 +83,17 @@ body {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    height: 25px;
+    height: 35px;
+    width: 35px;
     min-width: 0;
     min-height: 0;
     padding: 0;
     margin: 0;
-    border: transparent;
+    background: rgba(175, 213, 227);
     cursor: pointer;
     overflow: hidden; 
-    background: transparent;     /* invisible except icon */
+    border: transparent;
+    border-radius: 12px;
 }
 
 .toolbar button:hover {
@@ -154,24 +156,35 @@ body {
 
 .record-container {
     display: flex;
-    gap: 10px;
-
+    flex-direction: column; /* stack vertically */
+    gap: 1px;    
+    align-items: center;    /* center horizontally */
+           /* spacing between buttons */
 }
 
+
 .record-container button {
-    display: flex;
-    height: 20px;
-    font-size: 10px;
+     display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 35px;
+    width: 35px;
+    min-width: 0;
+    min-height: 0;
     padding: 0;
-    margin: 5px;
-    border-radius: 8px;
+    margin: 0;
+    background: rgb(175, 213, 227);
     cursor: pointer;
-    box-sizing: border-box;
+    overflow: hidden; 
+    border: transparent;
+    border-radius: 8px;
+
 }
 
 #playRecord {
     height: 30px;
-    
+        width: 30px;
+    border-radius: 2px;
 }
 
 #overlapPercSlider {

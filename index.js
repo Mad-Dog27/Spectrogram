@@ -120,7 +120,7 @@ let smoothOn = null;
 let melProcessed = false;
 let isDB = null;
 let REFERENCE = 2 ^ 15;
-let WIDTH = 3;    //0.7
+let WIDTH = 3;//3;    //0.7
 let HEIGHT = 1;  //0.49  DOESNT EFFECT - No point
 let RecordProcessing = false;
 
@@ -143,7 +143,7 @@ let CHOSEN_WINDOW = "hamming"// rectangular, hamming, blackman Harris
 chosenColourScheme = 'greyScale'
 let CHOSEN_MAGNITUDE_SCALE = "magnitude"
 
-canvasSpectrum.width = window.innerWidth * (WIDTH) - 2;  // 70% of screen width minus borders
+canvasSpectrum.width = window.innerWidth * (WIDTH) - 2;  // 33% of screen width minus borders
 canvasSpectrum.height = window.innerHeight * (HEIGHT * 1) - 2;
 canvasAxis.width = (canvasSpectrum.width + 2) / WIDTH - 2;
 canvasAxis.height = canvasSpectrum.height;
@@ -211,6 +211,8 @@ audioFileInput.addEventListener('change', async (event) => { //AUDIO FILE INPUT
         }
         console.log((performance.now() - properstarttime)/1000)
         console.log("fsavg: ", 1000*count/(performance.now() - properstarttime))
+        playRecordButton.style.backgroundColor = 'rgb(175, 213, 227)'
+
         //fftWorker.terminate();
         return;
     } else if (singleThreadMicOn) {console.log("Single Thread Microphone is in use"); return;} 
@@ -223,8 +225,9 @@ audioFileInput.addEventListener('change', async (event) => { //AUDIO FILE INPUT
 
         drawLoop();
         startAudioPipeline().catch(console.error);
-        processAgainInput.innerHTML = "&#9208;";
+        processAgainInput.innerHTML = "&#x1F3A4;&#x274C;";
         console.log(processAgainInput.innerHTML)
+        playRecordButton.style.backgroundColor = 'rgb(81, 74, 74)'
 
     
 })
@@ -470,7 +473,7 @@ function drawLoop() {
             }  
 
         }
-        }, (1/60))//(FRAMESIZE/SAMPLEFREQ)*1000)
+        }, 1000*(1/60))
     }
 }
 
@@ -1022,8 +1025,9 @@ function executeFFTWithSync(audioBuffer, source, analyser) {
                 createMovingSpectrogram(smoothChosenValues);
 
             } else { // normal display
-                //createSpectrum(chosenValues);
+                createSpectrum(chosenValues);
                 createMovingSpectrogram(chosenValues);
+                timeGraph(chunks[currentChunkIndex])
             }
             currentChunkIndex++; //incrementing chunk index
             
@@ -1664,9 +1668,9 @@ function melScale() {
 function drawAxisLabel() {
     const labelChunkeness = 2;
     const numLabels = 20;
-    const labelWidth = 10;
-
-    const numTimeLabels = canvasAxis.width/(5*10);
+    const labelLength = 10;
+    const timeGap = 50
+    const numTimeLabels = Math.floor(canvasAxis.width/(timeGap + labelChunkeness));
     if (!melOn) { // if normal
         ctxAxis.clearRect(canvasAxis.width - 51, 0, 51, canvasAxis.height)
         const labelHeight = canvasAxis.height / numLabels;
@@ -1676,9 +1680,9 @@ function drawAxisLabel() {
             ctxAxis.fillText(label, canvasAxis.width - 51, canvasAxis.height - n * labelHeight + 4); // Adjust position as needed
 
             ctxAxis.fillRect(
-                canvasAxis.width - labelWidth,
+                canvasAxis.width - labelLength,
                 canvasAxis.height - n * labelHeight,
-                labelWidth,
+                labelLength,
                 labelChunkeness
             )
             
@@ -1687,10 +1691,10 @@ function drawAxisLabel() {
         for (let n = 1; n <= numTimeLabels; n++) {
             console.log(n)
             ctxAxis.fillRect(
-                canvasAxis.width - n*((6*10)+labelChunkeness),
-                canvasAxis.height - labelWidth,
+                canvasAxis.width - n*timeGap - labelChunkeness,
+                canvasAxis.height - labelLength,
                 labelChunkeness,
-                labelWidth
+                labelLength
             )
         }
     } else { // if mel
