@@ -423,21 +423,10 @@ fftWorker.onmessage = (e) => {
         chunk = e.data.currentBuffer
         recordingchunk[f] = chunk
         f++;
-        /*
-        console.log(chunk)
-        let fftchunk = fft(addZeroes(applyWindow(chunk, FRAMESIZE)))
-        let data = computeMagnitudeAndDB(fftchunk, 1, false);
-        let dataMagnitude = data.map(bin => bin.magnitude);
-        let chosenValues = dataMagnitude.slice(0, nFFT / 2);
-
-        console.log(chosenValues)
-        createSpectrum(chosenValues)
-        */
+       
     } else {
     latestFFTData = (e.data)
-    //createSpectrum(latestFFTData)
-    //createMovingSpectrogram(latestFFTData);
-//timeGraph(chunk)
+   
     if (recordOn) { //record mic input 
                     //noOverlapBuffer[chunkIndex] = resampledTimeDomainBuffer;
             storedBuffer[m] = latestFFTData;
@@ -456,6 +445,9 @@ let recordingchunk = []
 let f = 0;
 let currentFreq = 0;
 let properstarttime = performance.now()
+
+let lastDraw = performance.now();
+let measuredRates = [];
 function drawLoop() {
     if (!toggle){
         let startTime = performance.now()
@@ -468,8 +460,23 @@ function drawLoop() {
                 createMovingSpectrogram(latestFFTData);
                 count++
                 timeGraph(chunk)
-                let currentTime = performance.now() - startTime
-                currentFreq = 1000/currentTime
+                
+                
+                /*
+                let now = performance.now();
+                let delta = now - lastDraw;   // ms between frames
+                lastDraw = now;
+                
+                let fps = 1000/delta
+                measuredRates.push(fps)
+                
+                if (measuredRates.length > 60) { // average over ~1s
+                    let avg = measuredRates.reduce((a,b)=>a+b,0) / measuredRates.length;
+                    currentFreq = avg
+                    //console.log("Avg real-time spectrogram rate:", avg.toFixed(2), "fps");
+                    measuredRates = [];
+                }
+                    */
             }  
 
         }
@@ -483,7 +490,7 @@ function updateFrequencyDisplay(freq) {
 // Example: update every second
 setInterval(() => {
     updateFrequencyDisplay(currentFreq);
-}, 250);
+}, 125)//250);
 
 /*
 function drawLoop() {
@@ -884,18 +891,21 @@ function processRecording() {
 
 }*/
 let j = 0;
-let startTime = audioContext.currentTime;
+let lastTime = performance.now()
+let fps = 60;
+let frameTime = 1000/fps // ms
 
 function processRecording() {
     console.log(recordingchunk)
-    let runTime = audioContext.currentTime - startTime;
-    let expectedTime = j * (1/60)//expectedChunkTime;
-
-    if (runTime >= expectedTime && j < storedBuffer.length) {
+    let now = performance.now()
+    let delta = now - lastTime;
+    if (delta >= frameTime && j < storedBuffer.length) {
+        lastTime = now;
         createMovingSpectrogram(storedBuffer[j]);
         createSpectrum(storedBuffer[j]);
         timeGraph(recordingchunk[j])
         j++;
+
     }
 
     if (j < storedBuffer.length) {
@@ -1446,8 +1456,7 @@ function createMovingSpectrogram(X) {
     // Precompute max/min values once (could be passed in from FFT too)
     let maxValue = -10;
     let minValue = 10;
-    console.log("MAX: ", MAX)
-    console.log("Min: ", MIN)
+   
     /*
     for (let i = 0; i < X.length; i++) {
         const val = X[i];
