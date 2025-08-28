@@ -55,8 +55,7 @@ onmessage = function (e) {
             const overlappedBuffer = addOverLap(currentBuffer)
             const chunk = addZeroes(applyWindow(overlappedBuffer, FRAME_SIZE));//Applying a window AND zero padding, the function above defaults to rectangular window
 
-            const thisChunk = fft(chunk)
-
+            let thisChunk = fft(chunk)
             if (CHOSEN_MAGNITUDE_SCALE == "magnitude") {
                 const data = computeMagnitudeAndDB(thisChunk, 1, false);
                 let dataMagnitude = data.map(bin => bin.magnitude);
@@ -70,7 +69,7 @@ onmessage = function (e) {
               
 
             } else {
-                const data = computeMagnitudeAndDB(thisChunk,30, true);
+                const data = computeMagnitudeAndDB(thisChunk,1, true);
                 let datadB = data.map(bin => bin.dB);
                 chosenValues = datadB.slice(0, NFFT / 2)
             }
@@ -89,10 +88,14 @@ function addZeroes(frame) { // add zeroes to match nFFT value
     if (N == NFFT) return frame; // no change needed
     const numZeroes = NFFT - N;
     const leftZeroes = Math.floor(numZeroes / 2); // zero padding to left of samples
-
+    /*
     const paddedFrame = new Float32Array(NFFT);
 
     paddedFrame.set(frame, leftZeroes); // right zeropadding automatically done when creating new array ^^
+    */
+
+    const paddedFrame = new Float32Array(NFFT);
+    paddedFrame.set(frame, 0); // put chunk at start, rest zeros
 
     return paddedFrame;
 }
@@ -219,9 +222,23 @@ function fft(input) {
 
     return output;
 }
+/*
+function computeMagnitudeAndDB(fftResult, REF, useDB) {
+    return fftResult.map(( { real, imag }, i) => {
+        let magnitude = (Math.sqrt(real ** 2 + imag ** 2))/NFFT;
+        if ((i !== 0) && (i !== NFFT/2)) {
+            magnitude *= 2;
+        }
+        let dB = 0;
+        if ((magnitude > 0) && (useDB)) {
+        dB = useDB ? 10 * Math.log10(magnitude / REF) : -100;
+        } 
+        return { real, imag, magnitude, dB };
+    });
+} */
 function computeMagnitudeAndDB(fftResult, REF, useDB) {
     return fftResult.map(({ real, imag }) => {
-        const magnitude = 2*(Math.sqrt(real ** 2 + imag ** 2));
+        const magnitude = Math.sqrt(real ** 2 + imag ** 2);
         let dB = 0;
         if ((magnitude > 0) && (useDB)) {
         dB = useDB ? 20 * Math.log10(magnitude / REF) : -100;

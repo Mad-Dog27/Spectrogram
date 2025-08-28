@@ -82,14 +82,14 @@ const overlapPercSlider = document.getElementById('overlapPercSlider');
 overlapPercSlider.style.width = optionWidth;
 const overlapPercSliderValue = document.getElementById('overlapPercSliderValue');
 //IDs for all three canvas's: Canvas2D, CanvasSpectrum, timeCanvas
-const canvas2D = document.getElementById("canvas2D");
-const ctx2D = canvas2D.getContext("2d");
-const canvasSpectrum = document.getElementById("canvasSpectrum");
+const canvas2D = document.getElementById("canvas2D", { willReadFrequently: true });
+const ctx2D = canvas2D.getContext("2d",  { willReadFrequently: true });
+const canvasSpectrum = document.getElementById("canvasSpectrum", );
 
 const canvasAxis = document.getElementById('canvasAxis');
 const ctxAxis = canvasAxis.getContext('2d');
 
-const ctxSpectrum = canvasSpectrum.getContext("2d");
+const ctxSpectrum = canvasSpectrum.getContext("2d",  { willReadFrequently: true });
 const timeCanvas = document.getElementById('timeCanvas')
 const ctxTime = timeCanvas.getContext("2d")
 let timeDiffs = []
@@ -417,6 +417,8 @@ micWorker.postMessage({ type: "config", sampleRate: SAMPLE__RATE,  deviceSampleR
 fftWorker.postMessage({ type: "config", sampleRate: SAMPLE__RATE,  deviceSampleRate: DEVICESAMPLERATE, frame_size: FRAME__SIZE, overlapPercent: OVERLAP_PERCENT, chosenWindow: CHOSEN_WINDOW, chosenMagnitude: CHOSEN_MAGNITUDE_SCALE });
 let m =0;
 let latestFFTData = new Float32Array(nFFT);
+let unusedDataBuffer = new Float32Array();
+let unused_index = 0;
 let chunk = new Float32Array(FRAMESIZE);
 fftWorker.onmessage = (e) => {
     if (e.data.type === "print"){
@@ -426,7 +428,10 @@ fftWorker.onmessage = (e) => {
        
     } else {
     latestFFTData = (e.data)
-   
+    unusedDataBuffer[unused_index] = e.data
+    unused_index++
+
+
     if (recordOn) { //record mic input 
                     //noOverlapBuffer[chunkIndex] = resampledTimeDomainBuffer;
             storedBuffer[m] = latestFFTData;
@@ -462,7 +467,7 @@ function drawLoop() {
                 timeGraph(chunk)
                 
                 
-                /*
+                
                 let now = performance.now();
                 let delta = now - lastDraw;   // ms between frames
                 lastDraw = now;
@@ -476,11 +481,10 @@ function drawLoop() {
                     //console.log("Avg real-time spectrogram rate:", avg.toFixed(2), "fps");
                     measuredRates = [];
                 }
-                    */
             }  
 
         }
-        }, 1000*(1/60))
+        }, (1/60))
     }
 }
 
@@ -1698,7 +1702,6 @@ function drawAxisLabel() {
         }
 
         for (let n = 1; n <= numTimeLabels; n++) {
-            console.log(n)
             ctxAxis.fillRect(
                 canvasAxis.width - n*timeGap - labelChunkeness,
                 canvasAxis.height - labelLength,
