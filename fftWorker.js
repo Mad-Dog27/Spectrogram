@@ -15,7 +15,7 @@ let higherPower = 1;
 let closestFrameSize = FRAME_SIZE;
 let neededFrameSize = FRAME_SIZE / ratio;
 let closestNeededFrameSize = neededFrameSize;
-let NFFT = 8192
+let NFFT = 2048
 let expectedChunkTime = CAPTURE_SIZE/SAMPLE_RATE
 let newAudioChunk = new Float32Array(FRAME_SIZE)
 
@@ -88,14 +88,14 @@ function addZeroes(frame) { // add zeroes to match nFFT value
     if (N == NFFT) return frame; // no change needed
     const numZeroes = NFFT - N;
     const leftZeroes = Math.floor(numZeroes / 2); // zero padding to left of samples
-    /*
+    
     const paddedFrame = new Float32Array(NFFT);
 
     paddedFrame.set(frame, leftZeroes); // right zeropadding automatically done when creating new array ^^
-    */
+    
 
-    const paddedFrame = new Float32Array(NFFT);
-    paddedFrame.set(frame, 0); // put chunk at start, rest zeros
+    //const paddedFrame = new Float32Array(NFFT);
+    //paddedFrame.set(frame, 0); // put chunk at start, rest zeros
 
     return paddedFrame;
 }
