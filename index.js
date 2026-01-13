@@ -82,14 +82,14 @@ const overlapPercSlider = document.getElementById('overlapPercSlider');
 overlapPercSlider.style.width = optionWidth;
 const overlapPercSliderValue = document.getElementById('overlapPercSliderValue');
 //IDs for all three canvas's: Canvas2D, CanvasSpectrum, timeCanvas
-const canvas2D = document.getElementById("canvas2D");
-const ctx2D = canvas2D.getContext("2d");
-const canvasSpectrum = document.getElementById("canvasSpectrum");
+const canvas2D = document.getElementById("canvas2D", { willReadFrequently: true });
+const ctx2D = canvas2D.getContext("2d",  { willReadFrequently: true });
+const canvasSpectrum = document.getElementById("canvasSpectrum", );
 
 const canvasAxis = document.getElementById('canvasAxis');
 const ctxAxis = canvasAxis.getContext('2d');
 
-const ctxSpectrum = canvasSpectrum.getContext("2d");
+const ctxSpectrum = canvasSpectrum.getContext("2d",  { willReadFrequently: true });
 const timeCanvas = document.getElementById('timeCanvas')
 const ctxTime = timeCanvas.getContext("2d")
 let timeDiffs = []
@@ -97,7 +97,7 @@ let timeDiffs = []
 ctxSpectrum.imageSmoothingEnabled = true;
 //Global Constants
 let FRAMESIZE = 128; //time domain amount of samples taken
-let nFFT = 2048; //frequency domain amount zeroes and values aquired through fft
+let nFFT = 8192; //frequency domain amount zeroes and values aquired through fft
 let OVERLAP_PERCENT = 0.25;
 let overlap = Math.round(FRAMESIZE * OVERLAP_PERCENT);
 const SPEED = 1;
@@ -212,6 +212,7 @@ audioFileInput.addEventListener('change', async (event) => { //AUDIO FILE INPUT
         console.log((performance.now() - properstarttime)/1000)
         console.log("fsavg: ", 1000*count/(performance.now() - properstarttime))
         playRecordButton.style.backgroundColor = 'rgb(175, 213, 227)'
+
         //fftWorker.terminate();
         return;
     } else if (singleThreadMicOn) {console.log("Single Thread Microphone is in use"); return;} 
@@ -222,11 +223,12 @@ audioFileInput.addEventListener('change', async (event) => { //AUDIO FILE INPUT
         micWorker.postMessage({ type: "paused", paused: PAUSED});
         fftWorker.postMessage({ type: "paused", paused: PAUSED});
 
-        //drawLoop();
+        drawLoop();
         startAudioPipeline().catch(console.error);
         processAgainInput.innerHTML = "&#x1F3A4;&#x274C;";
         console.log(processAgainInput.innerHTML)
         playRecordButton.style.backgroundColor = 'rgb(81, 74, 74)'
+
     
 })
 micButtonInput.addEventListener('click', () => {
@@ -415,26 +417,21 @@ micWorker.postMessage({ type: "config", sampleRate: SAMPLE__RATE,  deviceSampleR
 fftWorker.postMessage({ type: "config", sampleRate: SAMPLE__RATE,  deviceSampleRate: DEVICESAMPLERATE, frame_size: FRAME__SIZE, overlapPercent: OVERLAP_PERCENT, chosenWindow: CHOSEN_WINDOW, chosenMagnitude: CHOSEN_MAGNITUDE_SCALE });
 let m =0;
 let latestFFTData = new Float32Array(nFFT);
+let unusedDataBuffer = new Float32Array();
+let unused_index = 0;
 let chunk = new Float32Array(FRAMESIZE);
-
-let unusedData = []
-let unusedIndex = 0;
-/*
 fftWorker.onmessage = (e) => {
     if (e.data.type === "print"){
         chunk = e.data.currentBuffer
         recordingchunk[f] = chunk
         f++;
-    
+       
     } else {
     latestFFTData = (e.data)
-    unusedData[unusedIndex] = e.data
-    createSpectrum(latestFFTData)
-    createMovingSpectrogram(latestFFTData);
-    unusedIndex++;
-    //createSpectrum(latestFFTData)
-    //createMovingSpectrogram(latestFFTData);
-//timeGraph(chunk)
+    unusedDataBuffer[unused_index] = e.data
+    unused_index++
+
+
     if (recordOn) { //record mic input 
                     //noOverlapBuffer[chunkIndex] = resampledTimeDomainBuffer;
             storedBuffer[m] = latestFFTData;
@@ -444,7 +441,7 @@ fftWorker.onmessage = (e) => {
     
 }
 };
-*/
+
 let g = 0;
 // Create spectrogram visualization loop
 let intervalId2 = null
@@ -454,6 +451,8 @@ let f = 0;
 let currentFreq = 0;
 let properstarttime = performance.now()
 
+let lastDraw = performance.now();
+let measuredRates = [];
 function drawLoop() {
     if (!toggle){
         let startTime = performance.now()
@@ -466,134 +465,28 @@ function drawLoop() {
                 createMovingSpectrogram(latestFFTData);
                 count++
                 timeGraph(chunk)
-                let currentTime = performance.now() - startTime
-                currentFreq = 1000/currentTime
+                
+                
+                
+                let now = performance.now();
+                let delta = now - lastDraw;   // ms between frames
+                lastDraw = now;
+                
+                let fps = 1000/delta
+                measuredRates.push(fps)
+                
+                if (measuredRates.length > 60) { // average over ~1s
+                    let avg = measuredRates.reduce((a,b)=>a+b,0) / measuredRates.length;
+                    currentFreq = avg
+                    //console.log("Avg real-time spectrogram rate:", avg.toFixed(2), "fps");
+                    measuredRates = [];
+                }
             }  
 
         }
-        }, 1000*(1/60))
+        }, (1/60))
     }
 }
-
-
-let lastTime = 0;
-/*
-function drawLoop(now) {
-  //if (now - lastTime > 20) {   // ~33ms = 30fps
-    if (unusedIndex > 0) {
-        console.log(unusedIndex)
-        for (let i = 0; i < unusedIndex; i++) {
-            createMovingSpectrogram(unusedData[i]);
-            //timeGraph(chunk);
-        }
-        unusedIndex = 0;
-    }
-    lastTime = now;
-  //}
-  requestAnimationFrame(drawLoop);
-}
-
-requestAnimationFrame(drawLoop);
-*/
-
-
-// create an offscreen buffer
-const offscreen = document.createElement("canvas");
-offscreen.width = canvasSpectrum.width;
-offscreen.height = canvasSpectrum.height;
-
-const ctxOff = offscreen.getContext("2d");
-
-// keep a queue of incoming FFT frames
-let fftQueue = [];
-
-// worker sends FFT data
-fftWorker.onmessage = (e) => {
-    if (e.data.type !== "print") {
-        latestFFTData = (e.data)
-        fftQueue.push(latestFFTData);  // buffer it
-    } else {
-        
-    }
-};
-// draw one FFT frame column into offscreen
-function drawColumnToOffscreen(X) {
-    const height = offscreen.height;
-    const binHeight = height / (nFFT / 2);
-    const barWidth = 7;
-    // shift offscreen left
-    ctxOff.drawImage(offscreen, -barWidth, 0);
-    ctxOff.clearRect(offscreen.width - barWidth, 0, barWidth, height);
-     if (CHOSEN_MAGNITUDE_SCALE == "magnitude") {
-        globalMax = 3
-        globalMin = 0
-       } else {
-        globalMax = 0
-        globalMin = -60
-       }
-    // draw new column
-    const x = offscreen.width - barWidth;
-    for (let i = 0; i < nFFT / 2; i++) {
-        ctxOff.fillStyle = intensityToColor(X[i], globalMax, globalMin);
-        ctxOff.fillRect(x, height - (i + 1) * binHeight, barWidth, binHeight);
-    }
-}
-/*
-function createMovingSpectrogram(X) {
-    const fs = SAMPLEFREQ;
-    let barWidth = 1;
-   // if (FRAMESIZE ==1024) {barWidth = 10;}
-    const height = canvasSpectrum.height;
-    const width = canvasSpectrum.width;
-    const nyquist = fs / 2;
-    const binHeight = height / (nFFT / 2);
-    const ratio =1//fs/16000;
-
-    const maxBin = (SAMPLEFREQ / nyquist) * (nFFT/2)
-
-    // Shift canvas to the left
-    ctxSpectrum.drawImage(canvasSpectrum, -barWidth, 0);
-    ctxSpectrum.clearRect(width - barWidth, 0, barWidth, height);
-    // Precompute max/min values once (could be passed in from FFT too)
-    let maxValue = -10;
-    let minValue = 10;
-   
-       if (CHOSEN_MAGNITUDE_SCALE == "magnitude") {
-        globalMax = 3
-        globalMin = 0
-       } else {
-        globalMax = 0
-        globalMin = -60
-       }
-    if (!melOn) {
-        // Linear frequency scale
-        const xCoord = width - barWidth;
-
-        for (let i = 0; i < maxBin; i++) {
-            
-            const intensity = X[i];
-            if (intensity > MAX) {MAX = intensity}
-            if (intensity < MIN) {MIN = intensity}
-            const y = height - (i / (nFFT / 2)) * height * ratio;
-            const h = binHeight * ratio;
-            //if ()
-            ctxSpectrum.fillStyle = intensityToColor(intensity, globalMax, globalMin);
-            ctxSpectrum.fillRect(xCoord, y, barWidth, h);
-        } */
-// render loop at ~30fps
-function renderLoop() {
-    // drain the queue
-    while (fftQueue.length > 0) {
-        let X = fftQueue.shift();
-        drawColumnToOffscreen(X);
-    }
-    // blit to visible canvas
-    ctxSpectrum.drawImage(offscreen, 0, 0);
-   
-    requestAnimationFrame(renderLoop); // or setInterval at 30fps
-}
-renderLoop();
-
 
 function updateFrequencyDisplay(freq) {
     document.getElementById("freq-value").textContent = freq.toFixed(2);
@@ -601,7 +494,7 @@ function updateFrequencyDisplay(freq) {
 // Example: update every second
 setInterval(() => {
     updateFrequencyDisplay(currentFreq);
-}, 250);
+}, 125)//250);
 
 /*
 function drawLoop() {
@@ -687,6 +580,7 @@ async function startAudioPipeline() {
     micNode.port.onmessage = null; 
     return; // 
   }
+
   const chunk = e.data;
   micWorker.postMessage(chunk);
 };
@@ -1001,18 +895,21 @@ function processRecording() {
 
 }*/
 let j = 0;
-let startTime = audioContext.currentTime;
+let lastTime = performance.now()
+let fps = 60;
+let frameTime = 1000/fps // ms
 
 function processRecording() {
     console.log(recordingchunk)
-    let runTime = audioContext.currentTime - startTime;
-    let expectedTime = j * (1/60)//expectedChunkTime;
-
-    if (runTime >= expectedTime && j < storedBuffer.length) {
+    let now = performance.now()
+    let delta = now - lastTime;
+    if (delta >= frameTime && j < storedBuffer.length) {
+        lastTime = now;
         createMovingSpectrogram(storedBuffer[j]);
         createSpectrum(storedBuffer[j]);
         timeGraph(recordingchunk[j])
         j++;
+
     }
 
     if (j < storedBuffer.length) {
@@ -1547,7 +1444,7 @@ let MAX = -50;
 let MIN = 10;
 function createMovingSpectrogram(X) {
     const fs = SAMPLEFREQ;
-    let barWidth = 1;
+    let barWidth = 5;
    // if (FRAMESIZE ==1024) {barWidth = 10;}
     const height = canvasSpectrum.height;
     const width = canvasSpectrum.width;
@@ -1831,9 +1728,3 @@ function drawAxisLabel() {
         }
     }
 }
-
-
-
-
-
-// hell my nme is hugo
