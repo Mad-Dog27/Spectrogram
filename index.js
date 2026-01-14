@@ -201,8 +201,10 @@ audioFileInput.addEventListener('change', async (event) => { //AUDIO FILE INPUT
         //audioContext.suspend();//Pause the audiocontext from capturing data
         //micWorker.terminate(); 
         toggle = true;
-        micWorker.postMessage({ type: "paused", paused: PAUSED});
-        fftWorker.postMessage({ type: "paused", paused: PAUSED});
+        PAUSED = true;
+         micWorker.postMessage({ type: "paused", paused: true });
+        fftWorker.postMessage({ type: "paused", paused: true });
+
                         console.log(count)
         processAgainInput.innerHTML = "&#9654;";
         if (intervalId2 !== null) {
@@ -219,8 +221,10 @@ audioFileInput.addEventListener('change', async (event) => { //AUDIO FILE INPUT
     
         threadedMicOn = true;
         toggle = false;
-        micWorker.postMessage({ type: "paused", paused: PAUSED});
-        fftWorker.postMessage({ type: "paused", paused: PAUSED});
+       PAUSED = false;
+        micWorker.postMessage({ type: "paused", paused: false });
+        fftWorker.postMessage({ type: "paused", paused: false });
+
 
         //drawLoop();
         startAudioPipeline().catch(console.error);
@@ -411,8 +415,27 @@ console.log(DEVICESAMPLERATE)
 const micWorker = new Worker('micWorker.js');
 const fftWorker = new Worker('fftWorker.js');
 
-micWorker.postMessage({ type: "config", sampleRate: SAMPLE__RATE,  deviceSampleRate: DEVICESAMPLERATE, frame_size: FRAME__SIZE });
-fftWorker.postMessage({ type: "config", sampleRate: SAMPLE__RATE,  deviceSampleRate: DEVICESAMPLERATE, frame_size: FRAME__SIZE, overlapPercent: OVERLAP_PERCENT, chosenWindow: CHOSEN_WINDOW, chosenMagnitude: CHOSEN_MAGNITUDE_SCALE });
+micWorker.postMessage({
+  type: "config",
+  sampleRate: SAMPLE__RATE,
+  deviceSampleRate: DEVICESAMPLERATE,
+  useFIR: true,
+  firTaps: 63
+});
+
+fftWorker.postMessage({
+  type: "config",
+  sampleRate: SAMPLE__RATE,
+  frame_size: FRAME__SIZE,
+  overlapPercent: OVERLAP_PERCENT,
+  nfft: nFFT,
+  chosenWindow: CHOSEN_WINDOW === "blackman Harris" ? "blackmanHarris" : CHOSEN_WINDOW,
+  chosenMagnitude: CHOSEN_MAGNITUDE_SCALE, // "magnitude" or "deciBels"
+  dbRef: 1,
+  dbMin: -80,
+  dbMax: -20
+});
+
 let m =0;
 let latestFFTData = new Float32Array(nFFT);
 let chunk = new Float32Array(FRAMESIZE);
@@ -518,26 +541,59 @@ fftWorker.onmessage = (e) => {
 };
 // draw one FFT frame column into offscreen
 function drawColumnToOffscreen(X) {
-    const height = offscreen.height;
-    const binHeight = height / (nFFT / 2);
-    const barWidth = 7;
-    // shift offscreen left
-    ctxOff.drawImage(offscreen, -barWidth, 0);
-    ctxOff.clearRect(offscreen.width - barWidth, 0, barWidth, height);
-     if (CHOSEN_MAGNITUDE_SCALE == "magnitude") {
-        globalMax = 3
-        globalMin = 0
-       } else {
-        globalMax = 0
-        globalMin = -60
-       }
-    // draw new column
-    const x = offscreen.width - barWidth;
-    for (let i = 0; i < nFFT / 2; i++) {
-        ctxOff.fillStyle = intensityToColor(X[i], globalMax, globalMin);
-        ctxOff.fillRect(x, height - (i + 1) * binHeight, barWidth, binHeight);
-    }
+  const height = offscreen.height;
+  const barWidth = 20;
+  // shift left
+  ctxOff.drawImage(offscreen, -barWidth, 0);
+  ctxOff.clearRect(offscreen.width - barWidth, 0, barWidth, height);
+
+  // choose scale
+  if (CHOSEN_MAGNITUDE_SCALE === "magnitude") {
+    globalMax = 1;
+    globalMin = 0;
+  } else {
+    globalMax = 0;
+    globalMin = -40;
+  }
+console.log(CHOSEN_MAGNITUDE_SCALE)
+  // IMPORTANT: use actual bins from X
+  const bins = X.length;
+  const binHeight = height / bins;
+  const x = offscreen.width - barWidth;
+if (!melOn){
+  for (let i = 0; i < bins; i++) {
+    const v = Number.isFinite(X[i]) ? X[i] : globalMin; // or 0
+    ctxOff.fillStyle = intensityToColor(v, globalMax, globalMin);
+    ctxOff.fillRect(x, height - (i + 1) * binHeight, barWidth, binHeight);
+  }
 }
+if(melOn){
+ if (!melProcessed) {
+            mel = melScale()
+        }
+        mel.forEach((intensity, index) => {
+            const maxMel = 2595 * Math.log10(1 + (SAMPLEFREQ / 2) / 700); // Maximum mel value (Nyquist frequency)
+            const val = (index / mel.length) * maxMel;
+            const frequency = 700 * (10 ** ((val / 2595) - 1))
+            if (intensity <= canvasSpectrum.height) {
+                let melHeight = binHeight;
+                if ((index > 0) && (index < nFFT / 2)) {
+                    melHeight = (-mel[index - 1] + mel[index + 1])
+                }
+
+                ctxOff.fillStyle = intensityToColor(X[index], globalMax, globalMin);
+                ctxOff.fillRect(
+                    canvasSpectrum.width - barWidth,           // x-coordinate
+                    canvasSpectrum.height - mel[index],               // y-coordinate
+                    barWidth,                        // width
+                    melHeight                // height
+                );
+            } else {
+                //console.log(`Index: ${index}, Frequency: ${frequency.toFixed(2)} Hz`);
+            }
+        })}
+}
+
 /*
 function createMovingSpectrogram(X) {
     const fs = SAMPLEFREQ;
@@ -581,6 +637,7 @@ function createMovingSpectrogram(X) {
             ctxSpectrum.fillRect(xCoord, y, barWidth, h);
         } */
 // render loop at ~30fps
+/*
 function renderLoop() {
     // drain the queue
     while (fftQueue.length > 0) {
@@ -591,7 +648,20 @@ function renderLoop() {
     ctxSpectrum.drawImage(offscreen, 0, 0);
    
     requestAnimationFrame(renderLoop); // or setInterval at 30fps
+}*/
+function renderLoop() {
+  if (fftQueue.length > 0) {
+    // take the newest frame and discard older ones
+    const X = fftQueue[fftQueue.length - 1];
+
+    fftQueue.length = 0;
+    drawColumnToOffscreen(X);
+  }
+
+  ctxSpectrum.drawImage(offscreen, 0, 0);
+  requestAnimationFrame(renderLoop);
 }
+
 renderLoop();
 
 
@@ -1231,48 +1301,7 @@ function applyGaussianFilter(chosenValues, kernal) { // Applying gaussian smooth
 
     return smoothedValues;
 }
-/*
-function fft(input, start = 0, stride = 1, N = input.length) {
-        if ((N & (N - 1)) !== 0) {
-            console.error("Input length must be a power of 2");
-            return [];
-        }
-    
-        // Base case
-        if (N === 1) {
-            return [{ real: input[start], imag: 0 }];
-        }
-    
-        // Recursive FFT on even and odd indices
-        const even = fft(input, start, stride * 2, N / 2);
-        const odd = fft(input, start + stride, stride * 2, N / 2);
-    
-        const combined = Array(N).fill(0).map(() => ({ real: 0, imag: 0 }));
-    
-        for (let k = 0; k < N / 2; k++) {
-            const angle = (-2 * Math.PI * k) / N;
-            const twiddle = {
-                real: Math.cos(angle),
-                imag: Math.sin(angle)
-            };
-    
-            const t = {
-                real: twiddle.real * odd[k].real - twiddle.imag * odd[k].imag,
-                imag: twiddle.real * odd[k].imag + twiddle.imag * odd[k].real
-            };
-    
-            combined[k] = {
-                real: even[k].real + t.real,
-                imag: even[k].imag + t.imag
-            };
-            combined[k + N / 2] = {
-                real: even[k].real - t.real,
-                imag: even[k].imag - t.imag
-            };
-        }
-    
-        return combined;
-    }*/
+
    function bitReverseIndex(index, bits) {
     let reversed = 0;
     for (let i = 0; i < bits; i++) {
@@ -1597,20 +1626,21 @@ function createMovingSpectrogram(X) {
         }
     } else {
         // MEL frequency scale
-        if (!melProcessed) {
-            mel = melScale();
-        }
+      if (melOn) {
+        if (!melFB) melFB = buildMelFilterbank(64, SAMPLEFREQ, nFFT);
+  const melBands = applyMelFilterbank(X, melFB);
 
-        const maxMel = 2595 * Math.log10(1 + nyquist / 700);
-        const xCoord = width - barWidth;
+  // Now draw melBands as evenly spaced bins:
+  const bins = melBands.length;
+  const binHeight = height / bins;
+  for (let i = 0; i < bins; i++) {
+    const v = melBands[i];
+    ctxSpectrum.fillStyle = intensityToColor(v, globalMax, globalMin);
+    ctxSpectrum.fillRect(xCoord, height - (i+1)*binHeight, barWidth, binHeight);
+  }
+  return;
+}
 
-        for (let i = 1; i < mel.length - 1; i++) {
-            const melY = height - mel[ratio * i];
-            const melHeight = mel[i + 1] - mel[i - 1]; // Local bandwidth approximation
-
-            ctxSpectrum.fillStyle = intensityToColor(X[i], globalMax, globalMin);
-            ctxSpectrum.fillRect(xCoord, melY, barWidth, melHeight);
-        }
     }
 }
 
@@ -1708,56 +1738,28 @@ function intensityToColor(intensity, maxValue, minValue) {
         }
 
 
-    } else if (CHOSEN_MAGNITUDE_SCALE == "deciBels") { // if decibels 
-        const minIntensity = -60;
-        const maxIntensity = 10;
+    } else if (CHOSEN_MAGNITUDE_SCALE == "deciBels") {
+    // Use the max/min you passed in (globalMax/globalMin)
+    const dbMin = minValue;   // e.g. -100
+    const dbMax = maxValue;   // e.g. -20 (or 0)
 
-        const clamped = Math.min(Math.max(intensity, minIntensity), maxIntensity);
-        const normed = 1 - (clamped - minIntensity) / (maxIntensity - minIntensity);
-        const greyScale = Math.round(normed * 255);
-        let value = greyScale
-        //let normalized = Math.max(0, Math.min(1, (intensity - minIntensity) / (maxIntensity - minIntensity)));
-        //let normalizedPowered = Math.pow((normalized), POW) //Questionable alteration of Decibell scale, could change min and max
-        //let value = Math.round((1 - normalizedPowered) * 255);
+    // clamp
+    const clamped = Math.min(Math.max(intensity, dbMin), dbMax);
 
-        if (chosenColourScheme == "greyScale") {
-            
+    // normalise 0..1 (0 = dbMin, 1 = dbMax)
+    const norm = (clamped - dbMin) / (dbMax - dbMin + 1e-12);
 
-            if (range != 0) {
+    // If you want "louder = darker" for greyscale, invert here:
+    const v = Math.round((1 - norm) * 255);
 
-                r = g = b = value;
-            } else {
-                r = g = b = 255; // Default black if range is 0
-            }
-        } else if (chosenColourScheme == "neon") {
-            if (range != 0) {
-                r = 255 - value;
-                g = value;
-                b = 255;
-            } else {
-                r = 0;
-                g = 255;
-                b = 255;
-            }
-        } else if (chosenColourScheme == "heatedMetal") {
-            if (range != 0) {
-                // Spread value across red to yellow to orange to red range
-                r = Math.min(255, value * 2); // Red increases with value
-                g = Math.min(255, value * 1.5); // Green is less intense than red
-                b = Math.max(0, 255 - value); // Blue decreases as value increases
-            } else {
-                r = 255; // Default to full red when range is 0
-                g = 255; // Yellow at full intensity
-                b = 0;
+    r = g = b = v;
+}
 
-
-            }
-        }
-    }
 
 
     return `rgb(${r}, ${g}, ${b})`;
 }
+
 
 // mel scaling, only needs to occur once every sample freq change - calulates specfic index etc 
 function melScale() {
@@ -1813,6 +1815,7 @@ function drawAxisLabel() {
             )
         }
     } else { // if mel
+        labelWidth = 51
         ctxAxis.clearRect(canvasAxis.width - 51, 0, 51, canvasAxis.height)
         const melNum = Math.floor(mel.length / numLabels);
 
@@ -1823,17 +1826,76 @@ function drawAxisLabel() {
 
             ctxAxis.fillText(label, canvasAxis.width - 51, canvasAxis.height - melValue + 4); // Adjust position as needed
             ctxAxis.fillRect(
-                canvasAxis.width - labelWidth,
+                canvasAxis.width - labelLength,
                 canvasAxis.height - melValue,
-                labelWidth,
+                labelLength,
                 labelChunkeness
             )
         }
     }
 }
 
+let melFB = null; // { filters: Array<Float32Array>, freqsHz: Float32Array }
+
+function hzToMel(hz){ return 2595 * Math.log10(1 + hz/700); }
+function melToHz(m){ return 700 * (10**(m/2595) - 1); }
+
+function buildMelFilterbank(numBands, sampleRate, nfft) {
+  const numBins = nfft / 2;
+  const fMin = 0;
+  const fMax = sampleRate / 2;
+
+  const melMin = hzToMel(fMin);
+  const melMax = hzToMel(fMax);
+
+  // mel points (bands + 2 for edges)
+  const melPoints = new Float32Array(numBands + 2);
+  for (let i = 0; i < melPoints.length; i++) {
+    melPoints[i] = melMin + (i / (numBands + 1)) * (melMax - melMin);
+  }
+
+  // convert to Hz then to FFT bin indices
+  const hzPoints = new Float32Array(numBands + 2);
+  const binPoints = new Int32Array(numBands + 2);
+  for (let i = 0; i < hzPoints.length; i++) {
+    hzPoints[i] = melToHz(melPoints[i]);
+    binPoints[i] = Math.floor((hzPoints[i] / fMax) * (numBins - 1));
+  }
+
+  const filters = [];
+  for (let b = 0; b < numBands; b++) {
+    const left = binPoints[b];
+    const center = binPoints[b + 1];
+    const right = binPoints[b + 2];
+
+    const w = new Float32Array(numBins);
+    for (let k = left; k < center; k++) {
+      if (center !== left) w[k] = (k - left) / (center - left);
+    }
+    for (let k = center; k < right; k++) {
+      if (right !== center) w[k] = (right - k) / (right - center);
+    }
+    filters.push(w);
+  }
+
+  // store center freqs for labeling if you want
+  const centerHz = new Float32Array(numBands);
+  for (let b = 0; b < numBands; b++) centerHz[b] = hzPoints[b + 1];
+
+  return { filters, centerHz };
+}
+
+function applyMelFilterbank(mags, fb) {
+  const out = new Float32Array(fb.filters.length);
+  for (let b = 0; b < fb.filters.length; b++) {
+    const w = fb.filters[b];
+    let sum = 0;
+    for (let k = 0; k < mags.length; k++) sum += mags[k] * w[k];
+    out[b] = sum;
+  }
+  return out;
+}
+
+melFB = buildMelFilterbank(64, SAMPLEFREQ, nFFT);
 
 
-
-
-// hell my nme is hugo

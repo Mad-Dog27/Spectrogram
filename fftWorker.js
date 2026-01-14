@@ -1,248 +1,246 @@
-/* 
-Creation: 04/07/2025
-The purpose of this worker function is to handle the raw mic audio, it will resample
+/* fftWorker.js
+   Purpose:
+   - Receive resampled audio stream (Float32 chunks) from micWorker
+   - Maintain FIFO
+   - Produce STFT frames with overlap via hop size:
+       hop = frameSize - round(frameSize * overlapPercent)
+   - Apply chosen window
+   - Zero-pad to NFFT
+   - FFT
+   - Output magnitude or dB (EPS-safe, normalized, clamped)
 
-
+   Output:
+   - Float32Array length NFFT/2 (positive-frequency bins)
 */
-let g =0;
-let DEVICE_SAMPLE_RATE = 16000;
+
+"use strict";
+
 let SAMPLE_RATE = 16000;
-let FRAME_SIZE = 128;
-let CAPTURE_SIZE = 128;
-let ratio =  SAMPLE_RATE/DEVICE_SAMPLE_RATE;
-let lowerPower = 1;
-let higherPower = 1;
-let closestFrameSize = FRAME_SIZE;
-let neededFrameSize = FRAME_SIZE / ratio;
-let closestNeededFrameSize = neededFrameSize;
-let NFFT = 2048
-let expectedChunkTime = CAPTURE_SIZE/SAMPLE_RATE
-let newAudioChunk = new Float32Array(FRAME_SIZE)
+let FRAME_SIZE = 256;
+let OVERLAP_PERCENT = 0.75;
+let NFFT = 2048;
 
-let currentBuffer = new Float32Array(FRAME_SIZE)
-let prevBuffer = new Float32Array(FRAME_SIZE)
+let CHOSEN_WINDOW = "hamming"; // "rectangular" | "hamming" | "blackmanHarris"
+let MAG_MODE = "magnitude";    // "magnitude" | "deciBels"
 
-let overlapPercent = 0;
-let overlap = Math.round(FRAME_SIZE * overlapPercent);
 let PAUSED = false;
 
-let CHOSEN_MAGNITUDE_SCALE = "magnitude"
+// dB display settings
+let DB_REF = 1;       // reference AFTER normalization (keep 1 if using normalized magnitude)
+let DB_MIN = -40;     // clamp range for display
+let DB_MAX = 0;
 
-let OVERLAP_PERCENT = 0.25
-let CHOSEN_WINDOW = "blackman Harris"
+const EPS = 1e-12;
 
-let movingAvg = new Float32Array(128)
+// stream FIFO at target rate
+let fifo = new Float32Array(0);
 
-// Called when main thread sends audio chunks
-onmessage = function (e) {
-    if (e.data.type == "config"){
-        if ("sampleRate" in e.data) SAMPLE_RATE = e.data.sampleRate;
-        if ("deviceSampleRate" in e.data) DEVICE_SAMPLE_RATE = e.data.deviceSampleRate;
-        if ("frame_size" in e.data) FRAME_SIZE = e.data.frame_size;
-        if ("overlapPercent" in e.data) OVERLAP_PERCENT = e.data.overlapPercent;
-        if ("chosenWindow" in e.data) CHOSEN_WINDOW = e.data.chosenWindow;
-        if ("chosenMagnitude" in e.data) CHOSEN_MAGNITUDE_SCALE = e.data.chosenMagnitude
-        console.log("fs (target):", SAMPLE_RATE, ", fs (device):",DEVICE_SAMPLE_RATE, ", frame size:", FRAME_SIZE,", overlap:", OVERLAP_PERCENT*100,"%, Window:", CHOSEN_WINDOW, ", Magnitude:",CHOSEN_MAGNITUDE_SCALE)
-
-    } else if (e.data.type === "paused") {
-        PAUSED = e.data.paused;
-    }else {
-        
-        if (!PAUSED) {
-            let chosenValues;
-
-            currentBuffer = new Float32Array(e.data);
-            const overlappedBuffer = addOverLap(currentBuffer)
-            const chunk = addZeroes(applyWindow(overlappedBuffer, FRAME_SIZE));//Applying a window AND zero padding, the function above defaults to rectangular window
-
-            let thisChunk = fft(chunk)
-            if (CHOSEN_MAGNITUDE_SCALE == "magnitude") {
-                const data = computeMagnitudeAndDB(thisChunk, 1, false);
-                let dataMagnitude = data.map(bin => bin.magnitude);
-                chosenValues = dataMagnitude.slice(0, NFFT / 2);
-                
-                /*currentValues2 = currentBuffer.map((val, i) => 0.2*val * movingAvg[i])
-                
-                chosenValues = currentValues.map((val, i) => val*0.8) + currentValues2
-                movingAvg = new Float32Array(currentValues);
-                */
-              
-
-            } else {
-                const data = computeMagnitudeAndDB(thisChunk,1, true);
-                let datadB = data.map(bin => bin.dB);
-                chosenValues = datadB.slice(0, NFFT / 2)
-            }
-            let fftOutput = new Float32Array(chosenValues)
-
-            postMessage({ type: "print", currentBuffer});
-            postMessage(fftOutput, [fftOutput.buffer]);
-    }   
+function appendFloat32(a, b) {
+  if (a.length === 0) return b;
+  if (b.length === 0) return a;
+  const out = new Float32Array(a.length + b.length);
+  out.set(a, 0);
+  out.set(b, a.length);
+  return out;
 }
-};
 
-function addZeroes(frame) { // add zeroes to match nFFT value 
-    let N = frame.length;
-    if (N > NFFT) N = NFFT; // edge case, SHOULD NEVER HAPPEN
-
-    if (N == NFFT) return frame; // no change needed
-    const numZeroes = NFFT - N;
-    const leftZeroes = Math.floor(numZeroes / 2); // zero padding to left of samples
-    
-    const paddedFrame = new Float32Array(NFFT);
-
-    paddedFrame.set(frame, leftZeroes); // right zeropadding automatically done when creating new array ^^
-    
-
-    //const paddedFrame = new Float32Array(NFFT);
-    //paddedFrame.set(frame, 0); // put chunk at start, rest zeros
-
-    return paddedFrame;
+function getHop() {
+  const overlap = Math.round(FRAME_SIZE * OVERLAP_PERCENT);
+  return Math.max(1, FRAME_SIZE - overlap);
 }
-function applyWindow(unwindowChunk, frameLength) {
-    let chunk = new Float32Array(unwindowChunk)
-    if (CHOSEN_WINDOW == "rectangular") { // no change
-        return chunk;
-    }
 
-    if (CHOSEN_WINDOW == "hamming") {
-        for (let n = 0; n < frameLength; n++) {
-            chunk[n] = unwindowChunk[n] * (0.54 - 0.46 * Math.cos((2 * Math.PI * n) / (frameLength - 1)));
-        }
+function applyWindow(frame) {
+  const N = frame.length;
+  const out = new Float32Array(N);
 
-
-    }
-    if (CHOSEN_WINDOW == "blackman Harris") {
-        for (let n = 0; n < frameLength; n++) {
-            chunk[n] = unwindowChunk[n] * (0.35875 - 0.48829 * Math.cos((2 * Math.PI * n) / (frameLength - 1)) +
-                0.14128 * Math.cos((4 * Math.PI * n) / (frameLength - 1)) -
-                0.01168 * Math.cos((6 * Math.PI * n) / (frameLength - 1)));
-        }
-
-    }
-    return chunk;
-
-}
-// addoverlap to a buffer using the previous buffer
-function addOverLap() {
-    if (OVERLAP_PERCENT > 0) {
-    const safeCurrent = new Float32Array(currentBuffer); // full copy
-    const safePrev = new Float32Array(prevBuffer);       // full copy
-
-  let newOverlap = Math.floor(OVERLAP_PERCENT * FRAME_SIZE);
-  const newCurrentBuffer = new Float32Array(FRAME_SIZE);
-  // If no previous buffer, just fill with zeros + current
-  if (safePrev.length === 0) {
-    newCurrentBuffer.set(safeCurrent.subarray(0, FRAME_SIZE - newOverlap), newOverlap);
-    safePrev = newCurrentBuffer.slice(); // store for next round
-    return newCurrentBuffer;
+  if (CHOSEN_WINDOW === "rectangular") {
+    out.set(frame);
+    return out;
   }
 
-  prevLength = safePrev.length
-  currentLength = safeCurrent.length
-  if (prevLength < currentLength) {
-    newOverlap = prevLength 
+  if (CHOSEN_WINDOW === "hamming") {
+    for (let n = 0; n < N; n++) {
+      const w = 0.54 - 0.46 * Math.cos((2 * Math.PI * n) / (N - 1));
+      out[n] = frame[n] * w;
+    }
+    return out;
   }
 
-  newCurrentBuffer.set(safePrev.slice(safePrev.length - newOverlap), 0);
-  newCurrentBuffer.set(safeCurrent.slice(0, FRAME_SIZE - newOverlap), newOverlap);
-
- 
-
-
-    prevBuffer = newCurrentBuffer.slice();
-
-  return newCurrentBuffer;
-    }
-    return currentBuffer
+  // blackmanHarris
+  for (let n = 0; n < N; n++) {
+    const a0 = 0.35875;
+    const a1 = 0.48829;
+    const a2 = 0.14128;
+    const a3 = 0.01168;
+    const w =
+      a0
+      - a1 * Math.cos((2 * Math.PI * n) / (N - 1))
+      + a2 * Math.cos((4 * Math.PI * n) / (N - 1))
+      - a3 * Math.cos((6 * Math.PI * n) / (N - 1));
+    out[n] = frame[n] * w;
+  }
+  return out;
 }
 
-
+function zeroPad(frame) {
+  const out = new Float32Array(NFFT);
+  // place at start (simple). Centering not needed for magnitude spectra.
+  out.set(frame.slice(0, Math.min(frame.length, NFFT)), 0);
+  return out;
+}
 
 function bitReverseIndex(index, bits) {
-    let reversed = 0;
-    for (let i = 0; i < bits; i++) {
-        reversed <<= 1;
-        reversed |= index & 1;
-        index >>= 1;
-    }
-    return reversed;
+  let reversed = 0;
+  for (let i = 0; i < bits; i++) {
+    reversed = (reversed << 1) | (index & 1);
+    index >>= 1;
+  }
+  return reversed;
 }
 
-function fft(input) {
-    const N = input.length;
-    const levels = Math.log2(N);
+function fftReal(input) {
+  const N = input.length;
+  const levels = Math.log2(N);
+  if ((N & (N - 1)) !== 0) throw new Error("FFT length must be power of 2");
 
-    if ((N & (N - 1)) !== 0) {
-        throw new Error("Input length must be a power of 2");
+  const out = new Array(N);
+  for (let i = 0; i < N; i++) {
+    const j = bitReverseIndex(i, levels);
+    out[i] = { real: input[j], imag: 0 };
+  }
+
+  for (let size = 2; size <= N; size <<= 1) {
+    const half = size >> 1;
+    const step = (-2 * Math.PI) / size;
+
+    for (let i = 0; i < N; i += size) {
+      for (let j = 0; j < half; j++) {
+        const even = out[i + j];
+        const odd = out[i + j + half];
+
+        const ang = step * j;
+        const wr = Math.cos(ang);
+        const wi = Math.sin(ang);
+
+        const tr = wr * odd.real - wi * odd.imag;
+        const ti = wr * odd.imag + wi * odd.real;
+
+        out[i + j] = { real: even.real + tr, imag: even.imag + ti };
+        out[i + j + half] = { real: even.real - tr, imag: even.imag - ti };
+      }
     }
+  }
 
-    // Create output array of complex numbers
-    const output = new Array(N);
-    for (let i = 0; i < N; i++) {
-        const j = bitReverseIndex(i, levels);
-        output[i] = {
-            real: input[j],
-            imag: 0
-        };
-    }
-
-    for (let size = 2; size <= N; size <<= 1) {
-        const halfSize = size / 2;
-        const angleStep = (-2 * Math.PI) / size;
-
-        for (let i = 0; i < N; i += size) {
-            for (let j = 0; j < halfSize; j++) {
-                const even = output[i + j];
-                const odd = output[i + j + halfSize];
-
-                const angle = angleStep * j;
-                const twiddle = {
-                    real: Math.cos(angle),
-                    imag: Math.sin(angle)
-                };
-
-                const t = {
-                    real: twiddle.real * odd.real - twiddle.imag * odd.imag,
-                    imag: twiddle.real * odd.imag + twiddle.imag * odd.real
-                };
-
-                output[i + j] = {
-                    real: even.real + t.real,
-                    imag: even.imag + t.imag
-                };
-
-                output[i + j + halfSize] = {
-                    real: even.real - t.real,
-                    imag: even.imag - t.imag
-                };
-            }
-        }
-    }
-
-    return output;
+  return out;
 }
-/*
-function computeMagnitudeAndDB(fftResult, REF, useDB) {
-    return fftResult.map(( { real, imag }, i) => {
-        let magnitude = (Math.sqrt(real ** 2 + imag ** 2))/NFFT;
-        if ((i !== 0) && (i !== NFFT/2)) {
-            magnitude *= 2;
-        }
-        let dB = 0;
-        if ((magnitude > 0) && (useDB)) {
-        dB = useDB ? 10 * Math.log10(magnitude / REF) : -100;
-        } 
-        return { real, imag, magnitude, dB };
-    });
-} */
-function computeMagnitudeAndDB(fftResult, REF, useDB) {
-    return fftResult.map(({ real, imag }) => {
-        const magnitude = Math.sqrt(real ** 2 + imag ** 2);
-        let dB = 0;
-        if ((magnitude > 0) && (useDB)) {
-        dB = useDB ? 20 * Math.log10(magnitude / REF) : -100;
-        } 
-        return { real, imag, magnitude, dB };
-    });
-} 
+
+// Normalized single-sided magnitude (amplitude-ish)
+function magSingleSided(fftBins) {
+  const N = fftBins.length;
+  const half = N >> 1;
+  const mags = new Float32Array(half);
+
+  for (let i = 0; i < half; i++) {
+    let mag = Math.hypot(fftBins[i].real, fftBins[i].imag);
+
+    // Normalize by NFFT (keeps magnitude stable across NFFT)
+    mag /= N;
+
+    // Single-sided correction (except DC and Nyquist)
+    if (i !== 0 && i !== half) mag *= 2;
+
+    mags[i] = mag;
+  }
+  return mags;
+}
+
+let refEMA = 1e-4; // start at MIN_REF
+
+function toDB(mags) {
+  const out = new Float32Array(mags.length);
+  const MIN_REF = 1e-4;
+  const DB_MIN = -80;
+
+  // 95th percentile reference
+  const sorted = Array.from(mags).sort((a,b)=>a-b);
+  let frameRef = sorted[Math.floor(0.95 * sorted.length)];
+  frameRef = Math.max(frameRef, MIN_REF);
+
+  // smooth reference (EMA)
+  refEMA = Math.max(
+    MIN_REF,
+    0.15 * frameRef + 0.85 * refEMA
+  );
+
+  for (let i = 0; i < mags.length; i++) {
+    const db = 20 * Math.log10((mags[i] + 1e-12) / refEMA);
+    out[i] = Math.max(DB_MIN, Math.min(0, db));
+  }
+  return out;
+}
+
+
+
+function processFrames() {
+  const hop = getHop();
+
+
+    
+  while (fifo.length >= FRAME_SIZE) {
+    const frame = fifo.slice(0, FRAME_SIZE);
+    fifo = fifo.slice(hop);
+
+    const windowed = applyWindow(frame);
+    const padded = zeroPad(windowed);
+    const bins = fftReal(padded);
+    const mags = magSingleSided(bins);
+
+    let out;
+    if (MAG_MODE === "deciBels") out = toDB(mags);
+    else out = mags;
+    if (MAG_MODE === "deciBels") {
+  // after mags computed
+  let mn = 1e9, mx = -1e9;
+  for (let i=0;i<mags.length;i++){ const v=mags[i]; if(v<mn) mn=v; if(v>mx) mx=v; }
+  postMessage({ type:"debug", magsMin: mn, magsMax: mx, dbRef: DB_REF });
+}
+    postMessage(out, [out.buffer]);
+  }
+}
+
+onmessage = (e) => {
+  const msg = e.data;
+
+  if (msg && msg.type === "config") {
+    if (typeof msg.sampleRate === "number") SAMPLE_RATE = msg.sampleRate;
+    if (typeof msg.frame_size === "number") FRAME_SIZE = msg.frame_size;
+    if (typeof msg.overlapPercent === "number") OVERLAP_PERCENT = msg.overlapPercent;
+    if (typeof msg.nfft === "number") NFFT = msg.nfft;
+
+    if (typeof msg.chosenWindow === "string") CHOSEN_WINDOW = msg.chosenWindow;
+    if (typeof msg.chosenMagnitude === "string") MAG_MODE = msg.chosenMagnitude;
+
+    if (typeof msg.dbRef === "number") DB_REF = msg.dbRef;
+    if (typeof msg.dbMin === "number") DB_MIN = msg.dbMin;
+    if (typeof msg.dbMax === "number") DB_MAX = msg.dbMax;
+
+    // reset FIFO on config changes (predictable)
+    fifo = new Float32Array(0);
+    return;
+  }
+
+  if (msg && msg.type === "paused") {
+    PAUSED = !!msg.paused;
+    return;
+  }
+
+  if (PAUSED) return;
+
+  // Incoming audio stream chunk (Float32Array or transferable buffer)
+  let chunk;
+  if (msg instanceof Float32Array) chunk = msg;
+  else chunk = new Float32Array(msg);
+
+  fifo = appendFloat32(fifo, chunk);
+  processFrames();
+};
