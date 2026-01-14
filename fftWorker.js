@@ -171,7 +171,8 @@ function toDB(mags) {
     MIN_REF,
     0.15 * frameRef + 0.85 * refEMA
   );
-
+  refEMA = 0.001
+  console.log(refEMA)
   for (let i = 0; i < mags.length; i++) {
     const db = 20 * Math.log10((mags[i] + 1e-12) / refEMA);
     out[i] = Math.max(DB_MIN, Math.min(0, db));

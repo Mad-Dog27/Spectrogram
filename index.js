@@ -542,7 +542,7 @@ fftWorker.onmessage = (e) => {
 // draw one FFT frame column into offscreen
 function drawColumnToOffscreen(X) {
   const height = offscreen.height;
-  const barWidth = 20;
+  const barWidth = 40;
   // shift left
   ctxOff.drawImage(offscreen, -barWidth, 0);
   ctxOff.clearRect(offscreen.width - barWidth, 0, barWidth, height);
@@ -553,7 +553,7 @@ function drawColumnToOffscreen(X) {
     globalMin = 0;
   } else {
     globalMax = 0;
-    globalMin = -40;
+    globalMin = -60;
   }
 console.log(CHOSEN_MAGNITUDE_SCALE)
   // IMPORTANT: use actual bins from X
@@ -1748,7 +1748,7 @@ function intensityToColor(intensity, maxValue, minValue) {
 
     // normalise 0..1 (0 = dbMin, 1 = dbMax)
     const norm = (clamped - dbMin) / (dbMax - dbMin + 1e-12);
-
+    const boosted = norm * norm * norm
     // If you want "louder = darker" for greyscale, invert here:
     const v = Math.round((1 - norm) * 255);
 
