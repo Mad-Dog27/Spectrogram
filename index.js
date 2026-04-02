@@ -649,13 +649,29 @@ function renderLoop() {
    
     requestAnimationFrame(renderLoop); // or setInterval at 30fps
 }*/
+
+
+const world = document.createElement("canvas");
+const worldCtx = world.getContext("2d");
+
+const VIEW_W = canvasSpectrum.width;
+const VIEW_H = canvasSpectrum.height;
+
+const HISTORY_SCREENS = 10;                  // store 10 screens worth
+world.width  = VIEW_W * HISTORY_SCREENS;
+world.height = VIEW_H;
+
+let writeX = 0;
+let viewX = world.width - VIEW_W;  // start by showing the newest end
+
+
 function renderLoop() {
   if (fftQueue.length > 0) {
     // take the newest frame and discard older ones
     const X = fftQueue[fftQueue.length - 1];
 
     fftQueue.length = 0;
-    drawColumnToOffscreen(X);
+    if (!PAUSED) {drawColumnToOffscreen(X)};
   }
 
   ctxSpectrum.drawImage(offscreen, 0, 0);
